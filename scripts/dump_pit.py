@@ -119,8 +119,19 @@ class DumpPitData:
         shutil.copytree(str(self.qlib_dir.resolve()), str(target_dir.resolve()))
 
     def get_source_data(self, file_path: Path) -> pd.DataFrame:
+        """读取 PIT CSV，并丢弃不能构成有效修订的 NaN 数值行。
+
+        数值 ``0`` 是合法修订，必须保留；只有 pandas 识别出的真正缺失值
+        才会被过滤，以免空修订覆盖此前已经发布的有效值。
+        """
         df = pd.read_csv(str(file_path.resolve()), low_memory=False)
         df[self.value_column_name] = df[self.value_column_name].astype("float32")
+        missing_value_mask = df[self.value_column_name].isna()
+        if missing_value_mask.any():
+            logger.warning(
+                f"skip {int(missing_value_mask.sum())} NaN PIT revisions from {file_path.name}"
+            )
+            df = df.loc[~missing_value_mask].copy()
         df[self.date_column_name] = df[self.date_column_name].str.replace("-", "").astype("int32")
         # df.drop_duplicates([self.date_field_name], inplace=True)
         return df

@@ -369,3 +369,47 @@ logs/CatBoost/<YYYYMMDD_HHMMSS_微秒_随机后缀>/
 - `tests/test_workflow.py` 在 `setUpClass` 中创建系统临时目录，避免模块导入阶段产生文件。
 - 测试结束时先释放 Windows SQLite engine 和 MLflow store cache，再清理临时目录。
 - 项目根目录下遗留的空 `.mlruns_tmp` 可以永久删除，后续导入测试模块也不会重新创建。
+
+## 16. PIT 小样本下载与上游占位零复现
+
+PIT collector 增加显式股票参数：
+
+```text
+--symbols 600519.ss,000725.sz
+```
+
+涉及修改：
+
+- `scripts/data_collector/pit/collector.py`
+  - 新增逗号分隔的 `symbols` 参数。
+  - 指定股票时跳过东方财富全市场股票池请求，直接进入 Baostock 下载。
+  - 支持六位代码自动补充 `.ss` 或 `.sz` 后缀，并校验代码格式。
+  - 未指定 `symbols` 时保留原东方财富股票池和 `symbol_regex` 行为。
+
+公共 `get_hs_stock_symbols()` 未修改，因为 Yahoo 全市场采集器仍在使用。
+
+PIT 清洗采用两层规则：
+
+- 采集层按 Baostock 来源字段识别占位零：
+  - 业绩预告上下限同时为零时，视为“百分比不适用”，将该条百分比修订标记为 `NaN`。
+  - 业绩快报的总资产、净资产和 `ROEWa` 同时为零时，将 `ROEWa=0` 标记为 `NaN`；资产数据非零时，合法的 `ROEWa=0` 仍保留。
+  - 采集层只负责识别来源语义，不直接删除记录。
+- `scripts/dump_pit.py` 在写入修订链前跳过真正的 `NaN` 数值，避免空修订覆盖上一有效值；合法数值 `0` 仍正常写入。
+
+诊断阶段曾删除以下两只股票的 raw/normalized 小样本后重新下载（仅为本次复现，不作为后续运行步骤）：
+
+```text
+~/.qlib/stock_data/source/pit/{sh600519,sz000725}.csv
+~/.qlib/stock_data/source/pit_normalized/{sh600519,sz000725}.csv
+```
+
+保留现有 `~/.qlib/qlib_data/cn_data/financial/` 作为修正结果对照。本次只重新下载 raw CSV，没有执行 normalize 或 dump。
+
+后续修改与测试不得再删除或重新下载这批数据；除非用户另行明确要求，只做只读核验。
+
+Baostock 重新下载结果：
+
+- 两只股票均下载成功，错误股票数为 0。
+- `sh600519` 返回 1 条零值，5 天后同字段、同报告期更新为非零。
+- `sz000725` 返回 22 条零值，其中 14 条随后被同字段、同报告期的非零值修订。
+- 该结果确认占位零来自 Baostock 当前返回，不是旧 CSV 或 `dump_pit.py` 生成。

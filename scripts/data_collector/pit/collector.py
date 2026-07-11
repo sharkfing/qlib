@@ -40,6 +40,7 @@ class PitCollector(BaseCollector):
         check_data_length: bool = False,
         limit_nums: Optional[int] = None,
         symbol_regex: Optional[str] = None,
+        symbols: Optional[str] = None,
     ):
         """
         Parameters
@@ -64,8 +65,11 @@ class PitCollector(BaseCollector):
             using for debug, by default None
         symbol_regex: str
             symbol regular expression, by default None.
+        symbols: str
+            可选的逗号分隔股票代码，例如 ``600519.ss,000725.sz``；指定后跳过远程股票池。
         """
         self.symbol_regex = symbol_regex
+        self.symbols = self.parse_symbols(symbols)
         super().__init__(
             save_dir=save_dir,
             start=start,
@@ -78,9 +82,29 @@ class PitCollector(BaseCollector):
             limit_nums=limit_nums,
         )
 
+    @staticmethod
+    def parse_symbols(symbols: Optional[str]) -> Optional[List[str]]:
+        """解析并校验用户明确指定的沪深股票代码。"""
+        if not symbols or not symbols.strip():
+            return None
+
+        parsed_symbols = []
+        for symbol in map(str.strip, symbols.split(",")):
+            if re.fullmatch(r"\d{6}", symbol):
+                symbol = f"{symbol}.ss" if symbol.startswith("6") else f"{symbol}.sz"
+            if not re.fullmatch(r"\d{6}\.(ss|sz)", symbol, flags=re.IGNORECASE):
+                raise ValueError(f"Invalid stock symbol: {symbol}")
+            parsed_symbols.append(symbol.lower())
+        return sorted(set(parsed_symbols))
+
     def get_instrument_list(self) -> List[str]:
+        """优先返回明确股票；未指定时沿用远程股票池和正则筛选。"""
         logger.info("get cn stock symbols......")
-        symbols = get_hs_stock_symbols()
+        if self.symbols is not None:
+            symbols = self.symbols
+            logger.info("use explicitly configured symbols; skip remote stock list")
+        else:
+            symbols = get_hs_stock_symbols()
         if self.symbol_regex is not None:
             regex_compile = re.compile(self.symbol_regex)
             symbols = [symbol for symbol in symbols if regex_compile.match(symbol)]
@@ -105,13 +129,26 @@ class PitCollector(BaseCollector):
         while (resp.error_code == "0") and resp.next():
             report_list.append(resp.get_row_data())
         report_df = pd.DataFrame(report_list, columns=resp.fields)
+        # Baostock 会用全零表示快报未提供 ROE；总资产、净资产同时为零可排除合法 ROE=0。
+        placeholder_fields = [
+            "performanceExpressROEWa",
+            "performanceExpressTotalAsset",
+            "performanceExpressNetAsset",
+        ]
+        if set(placeholder_fields).issubset(report_df.columns):
+            placeholder_values = report_df[placeholder_fields].apply(pd.to_numeric, errors="coerce")
+            placeholder_mask = placeholder_values.eq(0).all(axis=1)
+        else:
+            placeholder_mask = pd.Series(False, index=report_df.index)
         try:
             report_df = report_df[list(column_mapping.keys())]
         except KeyError:
             return pd.DataFrame()
         report_df.rename(columns=column_mapping, inplace=True)
         report_df["field"] = "roeWa"
-        report_df["value"] = pd.to_numeric(report_df["value"], errors="ignore")
+        report_df["value"] = pd.to_numeric(report_df["value"], errors="coerce")
+        # 只标记来源特有的占位值；由 dump_pit 统一跳过 NaN 并构建修订链。
+        report_df.loc[placeholder_mask, "value"] = float("nan")
         report_df["value"] = report_df["value"].apply(lambda x: x / 100.0)
         return report_df
 
@@ -156,10 +193,14 @@ class PitCollector(BaseCollector):
         forecast_df = pd.DataFrame(forecast_list, columns=resp.fields)
         numeric_fields = ["profitForcastChgPctUp", "profitForcastChgPctDwn"]
         try:
-            forecast_df[numeric_fields] = forecast_df[numeric_fields].apply(pd.to_numeric, errors="ignore")
+            forecast_df[numeric_fields] = forecast_df[numeric_fields].apply(pd.to_numeric, errors="coerce")
         except KeyError:
             return pd.DataFrame()
+        # 扭亏、首亏等预告没有适用的同比百分比，Baostock 以双零占位，不能当作真实增长率。
+        placeholder_mask = forecast_df[numeric_fields].eq(0).all(axis=1)
         forecast_df["value"] = (forecast_df["profitForcastChgPctUp"] + forecast_df["profitForcastChgPctDwn"]) / 200
+        # 双零仅表示百分比不适用，转换为 NaN 后交给 dump_pit 统一处理。
+        forecast_df.loc[placeholder_mask, "value"] = float("nan")
         forecast_df = forecast_df[list(column_mapping.keys())]
         forecast_df.rename(columns=column_mapping, inplace=True)
         forecast_df["field"] = "YOYNI"
