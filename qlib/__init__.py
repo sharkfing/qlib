@@ -14,11 +14,38 @@ import os
 import platform
 import re
 import subprocess
+from importlib.metadata import PackageNotFoundError, version as get_package_version
 from typing import Union
 
 from ruamel.yaml import YAML
 
 from .log import get_module_logger
+
+
+def _suppress_gym_maintenance_notice():
+    """屏蔽旧版 Gym 在导入时直接写入 stderr 的维护公告。
+
+    Qlib 的 RL 模块暂时依赖旧版 Tianshou 和 Gym。Gym 的公告不是 Python
+    warning，无法通过 ``warnings.filterwarnings`` 精确过滤，因此在 Gym
+    导入前仅移除当前版本对应的公告文本，保留其他警告和异常输出。
+
+    Returns
+    -------
+    None
+        Gym 或 gym-notices 未安装时不执行任何操作。
+    """
+    try:
+        import gym_notices.notices as gym_notices
+
+        gym_version = get_package_version("gym")
+    except (ImportError, PackageNotFoundError):
+        return
+
+    gym_notices.notices.pop(gym_version, None)
+
+
+# Qlib 的任意子模块被导入前都会先执行包初始化，因此可以覆盖所有 Qlib 内部的 Gym 导入入口。
+_suppress_gym_maintenance_notice()
 
 
 # init qlib
