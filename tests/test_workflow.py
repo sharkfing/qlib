@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from mlflow.tracking._tracking_service import utils as tracking_utils
 
-from qlib.config import C, get_datacache_dir, get_default_mlflow_storage_uris, get_model_cache_path
+from qlib.config import C, get_datacache_dir, get_default_mlflow_storage_uris, get_model_cache_path, get_model_log_path
 from qlib.tests import TestAutoData
 from qlib.workflow import R
 from qlib.workflow.task.utils import replace_task_handler_with_cache
@@ -84,6 +84,58 @@ class HandlerCachePathTest(unittest.TestCase):
             self.assertEqual(handler_cache_dir, datacache_path / "handler_cache")
             self.assertTrue(model_cache_dir.is_dir())
             self.assertTrue(handler_cache_dir.is_dir())
+
+
+class ModelLogPathTest(unittest.TestCase):
+    """验证模型日志统一写入项目级 logs 目录。"""
+
+    def test_model_log_path_uses_independent_run_directory(self):
+        """相同模型的不同运行应分配不同日志目录。"""
+        with TemporaryDirectory() as temporary_directory:
+            logs_path = Path(temporary_directory).resolve()
+            first_log_path = get_model_log_path("CatBoost", root_path=logs_path)
+            second_log_path = get_model_log_path("CatBoost", root_path=logs_path)
+
+            self.assertEqual(first_log_path.parent, logs_path / "CatBoost")
+            self.assertEqual(second_log_path.parent, logs_path / "CatBoost")
+            self.assertNotEqual(first_log_path, second_log_path)
+            self.assertTrue(first_log_path.is_dir())
+            self.assertTrue(second_log_path.is_dir())
+
+    def test_catboost_uses_logs_directory_by_default(self):
+        """CatBoost 未显式配置 train_dir 时使用全局日志目录。"""
+        try:
+            from qlib.contrib.model.catboost_model import CatBoostModel
+        except ModuleNotFoundError:
+            self.skipTest("CatBoost is an optional dependency")
+
+        original_logs_path = C["logs_path"]
+        try:
+            with TemporaryDirectory() as temporary_directory:
+                logs_path = Path(temporary_directory).resolve()
+                C["logs_path"] = logs_path
+                model = CatBoostModel()
+
+                train_dir = Path(model._params["train_dir"])
+                self.assertEqual(train_dir.parent, logs_path / "CatBoost")
+                self.assertTrue(train_dir.is_dir())
+        finally:
+            C["logs_path"] = original_logs_path
+
+    def test_catboost_preserves_explicit_log_settings(self):
+        """显式 train_dir 或关闭文件输出时不应生成默认日志目录。"""
+        try:
+            from qlib.contrib.model.catboost_model import CatBoostModel
+        except ModuleNotFoundError:
+            self.skipTest("CatBoost is an optional dependency")
+
+        with TemporaryDirectory() as temporary_directory:
+            configured_path = Path(temporary_directory).resolve() / "custom"
+            configured_model = CatBoostModel(train_dir=str(configured_path))
+            disabled_model = CatBoostModel(allow_writing_files=False)
+
+            self.assertEqual(Path(configured_model._params["train_dir"]), configured_path)
+            self.assertNotIn("train_dir", disabled_model._params)
 
 
 class WorkflowTest(TestAutoData):

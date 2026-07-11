@@ -19,9 +19,11 @@ import copy
 import logging
 import platform
 import multiprocessing
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional, Union
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from qlib.constant import REG_CN, REG_US, REG_TW
 
@@ -65,6 +67,13 @@ DEFAULT_DATACACHE_ROOT = Path(
     os.environ.get("QLIB_DATACACHE_ROOT", Path(__file__).resolve().parents[1] / "datacache")
 ).expanduser().resolve()
 DEFAULT_DATACACHE_ROOT.mkdir(parents=True, exist_ok=True)
+
+# ═══ 运行日志默认值 ═══
+# 模型训练日志与数据缓存、MLflow 实验结果分开管理。
+DEFAULT_LOG_ROOT = Path(
+    os.environ.get("QLIB_LOG_ROOT", Path(__file__).resolve().parents[1] / "logs")
+).expanduser().resolve()
+DEFAULT_LOG_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def get_datacache_dir(
@@ -126,6 +135,41 @@ def get_model_cache_path(
             raise ValueError(f"Relative model cache path cannot leave datacache: {configured_path}")
         model_cache_dir = get_datacache_dir(model_name, root_path)
         resolved_path = model_cache_dir.joinpath(*relative_parts).resolve()
+    resolved_path.mkdir(parents=True, exist_ok=True)
+    return resolved_path
+
+
+def get_model_log_path(
+    model_name: str,
+    run_name: Optional[str] = None,
+    root_path: Union[str, Path] = DEFAULT_LOG_ROOT,
+) -> Path:
+    """创建并返回模型一次运行所使用的独立日志目录。
+
+    Parameters
+    ----------
+    model_name : str
+        模型名称，例如 ``CatBoost``。
+    run_name : Optional[str]
+        可选的运行目录名称；未指定时生成带时间和随机后缀的唯一名称。
+    root_path : Union[str, Path]
+        项目级 ``logs`` 根目录。
+
+    Returns
+    -------
+    Path
+        已创建的模型运行日志目录绝对路径。
+    """
+    if not model_name or Path(model_name).name != model_name:
+        raise ValueError(f"Invalid model log directory name: {model_name}")
+
+    if run_name is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        run_name = f"{timestamp}_{uuid4().hex[:8]}"
+    if not run_name or Path(run_name).name != run_name:
+        raise ValueError(f"Invalid model log run name: {run_name}")
+
+    resolved_path = Path(root_path).expanduser().resolve() / model_name / run_name
     resolved_path.mkdir(parents=True, exist_ok=True)
     return resolved_path
 
@@ -254,6 +298,7 @@ _default_config = {
     "provider_uri": "",
     # cache
     "datacache_path": DEFAULT_DATACACHE_ROOT,
+    "logs_path": DEFAULT_LOG_ROOT,
     "expression_cache": None,
     "calendar_cache": None,
     # for simple dataset cache

@@ -7,6 +7,7 @@ from typing import Text, Union
 from catboost import Pool, CatBoost
 from catboost.utils import get_gpu_device_count
 
+from ...config import C, get_model_log_path
 from ...model.base import Model
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
@@ -23,6 +24,9 @@ class CatBoostModel(Model, FeatureInt):
             raise NotImplementedError
         self._params = {"loss_function": loss}
         self._params.update(kwargs)
+        # CatBoost 默认向当前工作目录写 catboost_info；改为每个模型实例使用独立日志目录。
+        if self._params.get("allow_writing_files", True) and "train_dir" not in self._params:
+            self._params["train_dir"] = str(get_model_log_path("CatBoost", root_path=C["logs_path"]))
         self.model = None
 
     def fit(

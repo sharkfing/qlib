@@ -293,6 +293,8 @@ Rolling 模块导入测试期间出现过 Gym 的维护状态警告，但没有�
 | `375964f7` | 17:36 | 新建项目规则，约定用户脚本存入 `myscripts` |
 | `7cd881b4` | 17:57 | 解决 Handler cache 存储位置问题，迁移 DDG-DA 缓存 |
 | `647d242e` | 18:22 | 进一步统一 TRA、HighFreq、Rolling Process Data 等模型缓存目录 |
+| `bf641d1b` | 18:35 | 定向屏蔽 Qlib 导入链触发的 Gym 停止维护公告 |
+| `1cb5e8eb` | 18:37 | 将源码修改记录改为固定文件名，日期改在文档内部维护 |
 
 ## 12. 主要源码文件汇总
 
@@ -319,3 +321,42 @@ Rolling 模块导入测试期间出现过 Gym 的维护状态警告，但没有�
 
 - `tests/test_workflow.py`
 - `tests/dependency_tests/test_mlflow.py`
+- `tests/test_gym_notice.py`
+
+## 13. Gym 维护公告定向屏蔽
+
+旧版 Gym 的停止维护信息是在导入时直接写入 `stderr`，并非标准 Python warning。为避免 Qlib 的非 RL 模型导入时反复显示该公告，在 `qlib/__init__.py` 中增加定向处理：
+
+- 仅移除当前 Gym 版本在 `gym-notices` 中对应的维护公告。
+- 不重定向全局 `stderr`，保留其他警告与真实异常。
+- 用户在 Qlib 之前直接导入 Gym 时，公告仍会正常出现。
+- `tests/test_gym_notice.py` 使用独立 Python 子进程验证屏蔽行为。
+
+## 14. CatBoost 日志统一存储
+
+项目新增独立的运行日志根目录：
+
+```text
+C:\Users\wangyc\wqlib\logs\
+```
+
+`qlib/config.py` 新增 `DEFAULT_LOG_ROOT`、`C["logs_path"]` 和 `get_model_log_path()`。默认路径可通过环境变量 `QLIB_LOG_ROOT` 覆盖。
+
+CatBoost 不再把 `catboost_info` 写入启动目录，默认使用独立运行目录：
+
+```text
+logs/CatBoost/<YYYYMMDD_HHMMSS_微秒_随机后缀>/
+```
+
+路径规则：
+
+- 每个 `CatBoostModel` 实例使用独立日志目录，避免不同训练互相覆盖。
+- 用户显式传入 `train_dir` 时保持用户配置。
+- 用户设置 `allow_writing_files=False` 时不创建默认日志目录。
+- `logs/` 已加入 `.gitignore`。
+
+验证结果：
+
+- 3 个日志路径单元测试通过。
+- CatBoost RTX 5080 GPU 最小训练通过。
+- 训练指标、耗时和 TensorBoard events 均写入新的 `logs/CatBoost/` 路径。
