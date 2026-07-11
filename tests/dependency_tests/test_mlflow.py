@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 import platform
 from pathlib import Path
-import shutil
+from tempfile import TemporaryDirectory
 import time
 import unittest
 from urllib.parse import quote
@@ -15,11 +15,10 @@ from qlib.workflow.expm import MLflowExpManager
 
 
 class MLflowTest(unittest.TestCase):
-    TMP_PATH = Path("./.mlruns_tmp/").resolve()
-
     def setUp(self) -> None:
         """为每个测试准备独立的 SQLite 与 artifact 目录。"""
-        self.TMP_PATH.mkdir(parents=True, exist_ok=True)
+        self._temporary_directory = TemporaryDirectory(prefix="qlib_mlflow_test_")
+        self.TMP_PATH = Path(self._temporary_directory.name).resolve()
         self.tracking_uri, self.artifact_root = get_default_mlflow_storage_uris(self.TMP_PATH)
         self.clients = []
 
@@ -31,8 +30,7 @@ class MLflowTest(unittest.TestCase):
             if engine is not None:
                 engine.dispose()
         tracking_utils._tracking_store_registry._get_store_with_resolved_uri.cache_clear()
-        if self.TMP_PATH.exists():
-            shutil.rmtree(self.TMP_PATH)
+        self._temporary_directory.cleanup()
 
     def test_creating_client(self):
         """

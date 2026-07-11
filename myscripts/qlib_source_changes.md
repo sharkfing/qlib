@@ -360,3 +360,12 @@ logs/CatBoost/<YYYYMMDD_HHMMSS_微秒_随机后缀>/
 - 3 个日志路径单元测试通过。
 - CatBoost RTX 5080 GPU 最小训练通过。
 - 训练指标、耗时和 TensorBoard events 均写入新的 `logs/CatBoost/` 路径。
+
+## 15. MLflow 测试临时目录清理
+
+测试不再在项目根目录使用 `.mlruns_tmp`：
+
+- `tests/dependency_tests/test_mlflow.py` 为每个测试创建独立的系统 `TemporaryDirectory`。
+- `tests/test_workflow.py` 在 `setUpClass` 中创建系统临时目录，避免模块导入阶段产生文件。
+- 测试结束时先释放 Windows SQLite engine 和 MLflow store cache，再清理临时目录。
+- 项目根目录下遗留的空 `.mlruns_tmp` 可以永久删除，后续导入测试模块也不会重新创建。

@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 import unittest
 from pathlib import Path
-import shutil
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
@@ -139,30 +138,40 @@ class ModelLogPathTest(unittest.TestCase):
 
 
 class WorkflowTest(TestAutoData):
-    TMP_PATH = Path("./.mlruns_tmp/workflow").resolve()
-    TRACKING_URI, ARTIFACT_ROOT = get_default_mlflow_storage_uris(TMP_PATH)
-    _setup_kwargs = {
-        "exp_manager": {
-            "class": "MLflowExpManager",
-            "module_path": "qlib.workflow.expm",
-            "kwargs": {
-                "uri": TRACKING_URI,
-                "artifact_root": ARTIFACT_ROOT,
-                "default_exp_name": "Experiment",
-            },
+    @classmethod
+    def setUpClass(cls) -> None:
+        """在系统临时目录中初始化测试专用的 MLflow 存储。"""
+        cls._temporary_directory = TemporaryDirectory(prefix="qlib_workflow_test_")
+        cls.TMP_PATH = Path(cls._temporary_directory.name).resolve()
+        tracking_uri, artifact_root = get_default_mlflow_storage_uris(cls.TMP_PATH)
+        cls._setup_kwargs = {
+            "exp_manager": {
+                "class": "MLflowExpManager",
+                "module_path": "qlib.workflow.expm",
+                "kwargs": {
+                    "uri": tracking_uri,
+                    "artifact_root": artifact_root,
+                    "default_exp_name": "Experiment",
+                },
+            }
         }
-    }
+        try:
+            super().setUpClass()
+        except Exception:
+            cls._temporary_directory.cleanup()
+            raise
 
-    def tearDown(self) -> None:
-        """释放 SQLite 连接后清理测试产物。"""
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """释放 SQLite 连接并清理系统临时目录。"""
         client = R.exp_manager.client
         store = client._tracking_client.store
         engine = getattr(store, "engine", None)
         if engine is not None:
             engine.dispose()
         tracking_utils._tracking_store_registry._get_store_with_resolved_uri.cache_clear()
-        if self.TMP_PATH.exists():
-            shutil.rmtree(self.TMP_PATH)
+        cls._temporary_directory.cleanup()
+        super().tearDownClass()
 
     def test_get_local_dir(self):
         """验证 qlib 对象保存、读取及本地 artifact 目录定位。"""
