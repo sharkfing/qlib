@@ -9,6 +9,7 @@ import yaml
 
 from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
 from qlib.contrib.meta.data_selection.model import MetaModelDS
+from qlib.config import C, get_model_cache_dirs
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.model.meta.task import MetaTask
 from qlib.model.trainer import TrainerR
@@ -109,6 +110,9 @@ class DDGDA(Rolling):
                 The ratio of training data in the meta task dataset
             if segments is a string:
                 it will try its best to put its data in training and ensure that the date `segments` is in the test set
+        working_dir : str or Path, optional
+            DDG-DA 非 Handler 中间数据的目录。默认使用 ``datacache/DDG-DA``；Data Handler
+            始终写入 ``datacache/handler_cache``。
         """
         # NOTE:
         # the horizon must match the meaning in the base task template
@@ -117,8 +121,15 @@ class DDGDA(Rolling):
         self.alpha = alpha
         self.meta_1st_train_end = meta_1st_train_end
         super().__init__(**kwargs)
-        self.working_dir = self.conf_path.parent if working_dir is None else Path(working_dir)
-        self.proxy_hd = self.working_dir / "handler_proxy.pkl"
+        # ═══ DDG-DA 本地缓存分层 ═══
+        # 模型中间数据与 Data Handler 分开存放，便于复用和独立清理。
+        default_working_dir, self.handler_cache_dir = get_model_cache_dirs(
+            self.meta_exp_name,
+            C["datacache_path"],
+        )
+        self.working_dir = default_working_dir if working_dir is None else Path(working_dir).expanduser().resolve()
+        self.working_dir.mkdir(parents=True, exist_ok=True)
+        self.proxy_hd = self.handler_cache_dir / "DDG-DA.handler_proxy.pkl"
         self.fea_imp_n = fea_imp_n
         self.meta_data_proc = meta_data_proc
         self.loss_skip_thresh = loss_skip_thresh
@@ -160,7 +171,7 @@ class DDGDA(Rolling):
         # this must be lightGBM, because it needs to get the feature importance
         task = self.basic_task(enable_handler_cache=False)
         task = self._adjust_task(task, astype="gbdt")
-        task = replace_task_handler_with_cache(task, self.working_dir)
+        task = replace_task_handler_with_cache(task, self.handler_cache_dir)
 
         with R.start(experiment_name="feature_importance"):
             model = init_instance_by_config(task["model"])
@@ -186,7 +197,7 @@ class DDGDA(Rolling):
         # NOTE: adjusting to `self.sim_task_model` just for aligning with previous implementation.
         # In previous version. The data for proxy model is using sim_task_model's way for processing
         task = self._adjust_task(self.basic_task(enable_handler_cache=False), self.sim_task_model)
-        task = replace_task_handler_with_cache(task, self.working_dir)
+        task = replace_task_handler_with_cache(task, self.handler_cache_dir)
         # if self.meta_data_proc is not None:
         # else:
         #     # Otherwise, we don't need futher processing
@@ -225,7 +236,7 @@ class DDGDA(Rolling):
                 "kwargs": {"config": self.working_dir / "fea_label_df.pkl"},
             }
         )
-        handler.to_pickle(self.working_dir / self.proxy_hd, dump_all=True)
+        handler.to_pickle(self.proxy_hd, dump_all=True)
 
     @property
     def _internal_data_path(self):
@@ -238,7 +249,7 @@ class DDGDA(Rolling):
         """
         # According to the experiments, the choice of the model type is very important for achieving good results
         sim_task = self._adjust_task(self.basic_task(enable_handler_cache=False), astype=self.sim_task_model)
-        sim_task = replace_task_handler_with_cache(sim_task, self.working_dir)
+        sim_task = replace_task_handler_with_cache(sim_task, self.handler_cache_dir)
 
         if self.sim_task_model == "gbdt":
             sim_task["model"].setdefault("kwargs", {}).update({"early_stopping_rounds": None, "num_boost_round": 150})
@@ -271,7 +282,7 @@ class DDGDA(Rolling):
             "dataset": {
                 "class": "qlib.data.dataset.DatasetH",
                 "kwargs": {
-                    "handler": f"file://{(self.working_dir / self.proxy_hd).absolute()}",
+                    "handler": self.proxy_hd.resolve().as_uri(),
                     "segments": {
                         "train": (train_start, train_end),
                         "test": (test_start, self.basic_task()["dataset"]["kwargs"]["segments"]["test"][1]),
@@ -372,17 +383,17 @@ class DDGDA(Rolling):
 
     def run(self):
         # prepare the meta model for rolling ---------
-        # 1) file: handler_proxy.pkl (self.proxy_hd)
+        # 1) handler cache: handler_cache/DDG-DA.handler_proxy.pkl (self.proxy_hd)
         self._dump_data_for_proxy_model()
         # 2)
-        # file: internal_data_s20.pkl
+        # model cache: DDG-DA/internal_data_s20.pkl
         # mlflow: data_sim_s20, models for calculating meta_ipt
         self._dump_meta_ipt()
         # 3) meta model will be stored in `DDG-DA`
         self._train_meta_model()
 
         # Run rolling --------------------------------
-        # 4) new_tasks are saved in "tasks_s20.pkl" (reweighter is added)
+        # 4) new_tasks are saved in "DDG-DA/tasks_s20.pkl" (reweighter is added)
         # - the meta inference are done when calling `get_task_list`
         # 5) load the saved tasks and train model
         super().run()

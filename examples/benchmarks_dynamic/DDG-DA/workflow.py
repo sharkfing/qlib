@@ -26,7 +26,7 @@ class DDGDABench(DDGDA):
     def __init__(self, conf_path: Union[str, Path] = DEFAULT_CONF, horizon=20, **kwargs) -> None:
         # This code is for being compatible with the previous old code
         conf_path = Path(conf_path)
-        super().__init__(conf_path=conf_path, horizon=horizon, working_dir=DIRNAME, **kwargs)
+        super().__init__(conf_path=conf_path, horizon=horizon, **kwargs)
 
         for f in self.CONF_LIST:
             if conf_path.samefile(f):

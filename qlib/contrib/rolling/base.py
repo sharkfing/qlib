@@ -126,10 +126,10 @@ class Rolling:
         This class tries to add more feature
         """
         if self.h_path is not None:
-            h_path = Path(self.h_path)
-            task["dataset"]["kwargs"]["handler"] = f"file://{h_path}"
+            h_path = Path(self.h_path).expanduser().resolve()
+            task["dataset"]["kwargs"]["handler"] = h_path.as_uri()
         else:
-            task = replace_task_handler_with_cache(task, self.conf_path.parent)
+            task = replace_task_handler_with_cache(task)
         return task
 
     def _update_start_end_time(self, task: dict):

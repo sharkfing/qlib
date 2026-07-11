@@ -24,6 +24,22 @@ The default forecasting models are `Linear`. Users can choose other forecasting 
     python workflow.py --conf_path=../workflow_config_lightgbm_Alpha158.yaml run
 ```
 
+# Local Cache
+The example stores generated Data Handler and model-specific intermediate files under the project-level cache directory instead of the source directory:
+
+```text
+datacache/
+├── handler_cache/
+│   ├── DDG-DA.handler_proxy.pkl
+│   └── <handler class>.<config hash>.pkl
+└── DDG-DA/
+    ├── fea_label_df.pkl
+    ├── internal_data_s20.pkl
+    └── tasks_s20.pkl
+```
+
+The cache root can be overridden with the `QLIB_DATACACHE_ROOT` environment variable. MLflow experiment metadata and artifacts remain under `mlruns/`.
+
 # Results
 The results of related methods in Qlib's public dataset can be found [here](../)
 

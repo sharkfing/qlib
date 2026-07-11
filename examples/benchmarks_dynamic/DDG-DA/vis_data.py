@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from qlib.utils.pickle_utils import restricted_pickle_load
+from qlib.config import DEFAULT_DATACACHE_ROOT
+
+CACHE_DIR = DEFAULT_DATACACHE_ROOT / "DDG-DA"
 
 sns.set(color_codes=True)
 plt.rcParams["font.sans-serif"] = "SimHei"
@@ -18,7 +21,7 @@ from tqdm.auto import tqdm
 # # Meta Input
 
 # +
-with open("./internal_data_s20.pkl", "rb") as f:
+with (CACHE_DIR / "internal_data_s20.pkl").open("rb") as f:
     data = restricted_pickle_load(f)
 
 data.data_ic_df.columns.names = ["start_date", "end_date"]
@@ -52,7 +55,7 @@ pd.DataFrame(meta_m.tn.twm.linear.weight.detach().numpy()).T[0].rolling(5).mean(
 # # Meta Output
 
 # +
-with open("./tasks_s20.pkl", "rb") as f:
+with (CACHE_DIR / "tasks_s20.pkl").open("rb") as f:
     tasks = restricted_pickle_load(f)
 
 task_df = {}

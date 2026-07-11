@@ -59,6 +59,38 @@ DEFAULT_MLFLOW_ROOT = Path(
 ).expanduser().resolve()
 DEFAULT_MLFLOW_URI, DEFAULT_MLFLOW_ARTIFACT_ROOT = get_default_mlflow_storage_uris(DEFAULT_MLFLOW_ROOT)
 
+# ═══ 数据与模型中间缓存默认值 ═══
+# 统一放在源码根目录，避免 handler 和示例模型缓存散落到运行目录。
+DEFAULT_DATACACHE_ROOT = Path(
+    os.environ.get("QLIB_DATACACHE_ROOT", Path(__file__).resolve().parents[1] / "datacache")
+).expanduser().resolve()
+DEFAULT_DATACACHE_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+def get_model_cache_dirs(model_name: str, root_path: Union[str, Path] = DEFAULT_DATACACHE_ROOT) -> tuple[Path, Path]:
+    """创建并返回模型中间数据目录与共享 Data Handler 缓存目录。
+
+    Parameters
+    ----------
+    model_name : str
+        模型或示例名称，用作 ``datacache`` 下的子目录名。
+    root_path : Union[str, Path]
+        项目级 ``datacache`` 根目录。
+
+    Returns
+    -------
+    tuple[Path, Path]
+        模型专用目录与共享 ``handler_cache`` 目录。
+    """
+    if not model_name or Path(model_name).name != model_name:
+        raise ValueError(f"Invalid model cache directory name: {model_name}")
+    resolved_root = Path(root_path).expanduser().resolve()
+    model_cache_dir = resolved_root / model_name
+    handler_cache_dir = resolved_root / "handler_cache"
+    model_cache_dir.mkdir(parents=True, exist_ok=True)
+    handler_cache_dir.mkdir(parents=True, exist_ok=True)
+    return model_cache_dir, handler_cache_dir
+
 
 class MLflowSettings(BaseSettings):
     uri: str = DEFAULT_MLFLOW_URI
@@ -183,6 +215,7 @@ _default_config = {
     #   3. qlib.init: provider_uri
     "provider_uri": "",
     # cache
+    "datacache_path": DEFAULT_DATACACHE_ROOT,
     "expression_cache": None,
     "calendar_cache": None,
     # for simple dataset cache

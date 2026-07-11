@@ -15,7 +15,7 @@ from qlib.config import C
 from qlib.log import get_module_logger
 from pymongo import MongoClient
 from pymongo.database import Database
-from typing import Union
+from typing import Optional, Union
 from pathlib import Path
 
 
@@ -280,10 +280,11 @@ class TimeAdjuster:
             raise NotImplementedError(f"This type of input is not supported")
 
 
-def replace_task_handler_with_cache(task: dict, cache_dir: Union[str, Path] = ".") -> dict:
+def replace_task_handler_with_cache(task: dict, cache_dir: Optional[Union[str, Path]] = None) -> dict:
     """
     Replace the handler in task with a cache handler.
-    It will automatically cache the file and save it in cache_dir.
+    It will automatically cache the file and save it in cache_dir. When cache_dir is not provided,
+    the cache is stored in ``C["datacache_path"] / "handler_cache"`` instead of the current working directory.
 
     >>> import qlib
     >>> qlib.auto_init()
@@ -295,7 +296,10 @@ def replace_task_handler_with_cache(task: dict, cache_dir: Union[str, Path] = ".
     {'dataset': {'kwargs': {'handler': 'file...Alpha158.3584f5f8b4.pkl'}}}
 
     """
-    cache_dir = Path(cache_dir)
+    if cache_dir is None:
+        cache_dir = Path(C["datacache_path"]) / "handler_cache"
+    cache_dir = Path(cache_dir).expanduser().resolve()
+    cache_dir.mkdir(parents=True, exist_ok=True)
     task = deepcopy(task)
     handler = task["dataset"]["kwargs"]["handler"]
     if isinstance(handler, dict):
@@ -304,5 +308,5 @@ def replace_task_handler_with_cache(task: dict, cache_dir: Union[str, Path] = ".
         if not h_path.exists():
             h = init_instance_by_config(handler)
             h.to_pickle(h_path, dump_all=True)
-        task["dataset"]["kwargs"]["handler"] = f"file://{h_path}"
+        task["dataset"]["kwargs"]["handler"] = h_path.resolve().as_uri()
     return task
