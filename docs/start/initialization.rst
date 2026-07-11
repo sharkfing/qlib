@@ -64,19 +64,23 @@ The following are several important parameters of `qlib.init` (`Qlib` has a lot 
 
         If Qlib fails to connect redis via `redis_host` and `redis_port`, cache mechanism will not be used! Please refer to `Cache <../component/data.html#cache>`_ for details.
 - `exp_manager`
-    Type: dict, optional parameter, the setting of `experiment manager` to be used in qlib. Users can specify an experiment manager class, as well as the tracking URI for all the experiments. However, please be aware that we only support input of a dictionary in the following style for `exp_manager`. For more information about `exp_manager`, users can refer to `Recorder: Experiment Management <../component/recorder.html>`_.
+    Type: dict, optional parameter, the setting of `experiment manager` to be used in qlib. Users can specify an experiment manager class, the tracking URI for experiment metadata, and a separate artifact root. However, please be aware that we only support input of a dictionary in the following style for `exp_manager`. For more information about `exp_manager`, users can refer to `Recorder: Experiment Management <../component/recorder.html>`_.
 
     .. code-block:: Python
 
-        # For example, if you want to set your tracking_uri to a <specific folder>, you can initialize qlib below
+        # Store metadata in SQLite and artifacts in a separate local directory.
         qlib.init(provider_uri=provider_uri, region=REG_CN, exp_manager= {
             "class": "MLflowExpManager",
             "module_path": "qlib.workflow.expm",
             "kwargs": {
-                "uri": "python_execution_path/mlruns",
+                "uri": "sqlite:///C:/path/to/mlruns/mlflow.db",
+                "artifact_root": "file:///C:/path/to/mlruns/artifacts",
                 "default_exp_name": "Experiment",
             }
         })
+
+    New experiments are stored below ``artifact_root/<encoded experiment name>/<run id>/artifacts``.
+    Existing experiments retain the artifact location recorded when they were created.
 - `mongo`
     Type: dict, optional parameter, the setting of `MongoDB <https://www.mongodb.com/>`_ which will be used in some features such as `Task Management <../advanced/task_management.html>`_, with high performance and clustered processing.
     Users need to follow the steps in  `installation <https://www.mongodb.com/try/download/community>`_  to install MongoDB firstly and then access it via a URI.

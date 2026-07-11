@@ -31,8 +31,38 @@ if TYPE_CHECKING:
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def get_default_mlflow_storage_uris(root_path: Union[str, Path]) -> tuple[str, str]:
+    """准备统一根目录并生成 MLflow SQLite 与 artifact URI。
+
+    Parameters
+    ----------
+    root_path : Union[str, Path]
+        MLflow 元数据数据库和 artifacts 的统一根目录。
+
+    Returns
+    -------
+    tuple[str, str]
+        SQLite tracking URI 与本地 artifact root URI。
+    """
+    resolved_root = Path(root_path).expanduser().resolve()
+    artifact_path = resolved_root / "artifacts"
+    artifact_path.mkdir(parents=True, exist_ok=True)
+    tracking_uri = f"sqlite:///{(resolved_root / 'mlflow.db').as_posix()}"
+    artifact_root = artifact_path.as_uri()
+    return tracking_uri, artifact_root
+
+
+# ═══ MLflow 本地存储默认值 ═══
+# 开发模式安装时从 qlib 包位置定位源码根目录，避免结果随启动目录漂移。
+DEFAULT_MLFLOW_ROOT = Path(
+    os.environ.get("QLIB_MLFLOW_ROOT", Path(__file__).resolve().parents[1] / "mlruns")
+).expanduser().resolve()
+DEFAULT_MLFLOW_URI, DEFAULT_MLFLOW_ARTIFACT_ROOT = get_default_mlflow_storage_uris(DEFAULT_MLFLOW_ROOT)
+
+
 class MLflowSettings(BaseSettings):
-    uri: str = "file:" + str(Path(os.getcwd()).resolve() / "mlruns")
+    uri: str = DEFAULT_MLFLOW_URI
+    artifact_root: str = DEFAULT_MLFLOW_ARTIFACT_ROOT
     default_exp_name: str = "Experiment"
 
 
@@ -221,6 +251,7 @@ _default_config = {
         "module_path": "qlib.workflow.expm",
         "kwargs": {
             "uri": QSETTINGS.mlflow.uri,
+            "artifact_root": QSETTINGS.mlflow.artifact_root,
             "default_exp_name": QSETTINGS.mlflow.default_exp_name,
         },
     },

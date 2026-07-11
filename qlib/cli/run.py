@@ -1,5 +1,6 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
+from copy import deepcopy
 import logging
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ from jinja2 import Template, meta
 from ruamel.yaml import YAML
 
 import qlib
-from qlib.config import C
+from qlib.config import C, get_default_mlflow_storage_uris
 from qlib.log import get_module_logger
 from qlib.model.trainer import task_train
 from qlib.utils import set_log_with_config
@@ -83,7 +84,7 @@ def render_template(config_path: str) -> str:
 
 
 # workflow handler function
-def workflow(config_path, experiment_name="workflow", uri_folder="mlruns"):
+def workflow(config_path, experiment_name="workflow", uri_folder=None):
     """
     This is a Qlib CLI entrance.
     User can run the whole Quant research workflow defined by a configure file
@@ -138,8 +139,12 @@ def workflow(config_path, experiment_name="workflow", uri_folder="mlruns"):
     if "exp_manager" in config.get("qlib_init"):
         qlib.init(**config.get("qlib_init"))
     else:
-        exp_manager = C["exp_manager"]
-        exp_manager["kwargs"]["uri"] = "file:" + str(Path(os.getcwd()).resolve() / uri_folder)
+        exp_manager = deepcopy(C["exp_manager"])
+        # 仅在用户显式指定目录时覆盖默认存储位置，避免 qrun 重新启用旧 FileStore。
+        if uri_folder is not None:
+            tracking_uri, artifact_root = get_default_mlflow_storage_uris(Path(uri_folder))
+            exp_manager["kwargs"]["uri"] = tracking_uri
+            exp_manager["kwargs"]["artifact_root"] = artifact_root
         qlib.init(**config.get("qlib_init"), exp_manager=exp_manager)
 
     if "experiment_name" in config:

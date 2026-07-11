@@ -1,14 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from urllib.parse import urlparse
-import mlflow
-from filelock import FileLock
-from mlflow.exceptions import MlflowException, RESOURCE_ALREADY_EXISTS, ErrorCode
-from mlflow.entities import ViewType
 import os
-from typing import Optional, Text
 from pathlib import Path
+from typing import Optional, Text
+from urllib.parse import quote, urlparse
+
+from filelock import FileLock
+import mlflow
+from mlflow.entities import ViewType
+from mlflow.exceptions import ErrorCode, MlflowException, RESOURCE_ALREADY_EXISTS
+from mlflow.utils.uri import append_to_uri_path
 
 from .exp import MLflowExperiment, Experiment
 from ..config import C
@@ -319,6 +321,39 @@ class MLflowExpManager(ExpManager):
     Use mlflow to implement ExpManager.
     """
 
+    def __init__(self, uri: Text, default_exp_name: Optional[Text], artifact_root: Optional[Text] = None):
+        """初始化 MLflow 实验管理器。
+
+        Parameters
+        ----------
+        uri : str
+            MLflow tracking URI，例如 SQLite 数据库 URI。
+        default_exp_name : str, optional
+            默认实验名称。
+        artifact_root : str, optional
+            所有实验 artifacts 的统一根 URI；每个实验会追加安全化后的实验名称。
+        """
+        super().__init__(uri=uri, default_exp_name=default_exp_name)
+        self.artifact_root = artifact_root
+
+    def _get_experiment_artifact_location(self, experiment_name: Text) -> Optional[Text]:
+        """返回当前实验独占的 artifact URI。
+
+        Parameters
+        ----------
+        experiment_name : str
+            MLflow 实验名称。
+
+        Returns
+        -------
+        str, optional
+            以 URL 编码实验名称结尾的 artifact URI；未配置根目录时返回 ``None``。
+        """
+        if self.artifact_root is None:
+            return None
+        safe_experiment_name = quote(str(experiment_name), safe="")
+        return append_to_uri_path(self.artifact_root, safe_experiment_name)
+
     @property
     def client(self):
         # Please refer to `tests/dependency_tests/test_mlflow.py::MLflowTest::test_creating_client`
@@ -354,7 +389,11 @@ class MLflowExpManager(ExpManager):
         assert experiment_name is not None
         # init experiment
         try:
-            experiment_id = self.client.create_experiment(experiment_name)
+            artifact_location = self._get_experiment_artifact_location(experiment_name)
+            experiment_id = self.client.create_experiment(
+                experiment_name,
+                artifact_location=artifact_location,
+            )
         except MlflowException as e:
             if e.error_code == ErrorCode.Name(RESOURCE_ALREADY_EXISTS):
                 raise ExpAlreadyExistError() from e
