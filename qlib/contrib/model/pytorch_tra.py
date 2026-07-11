@@ -23,6 +23,7 @@ except ImportError:
 from tqdm import tqdm
 
 from qlib.constant import EPS
+from qlib.config import C, get_model_cache_path
 from qlib.log import get_module_logger
 from qlib.model.base import Model
 from qlib.contrib.data.dataset import MTSDatasetH
@@ -112,7 +113,7 @@ class TRAModel(Model):
         self.rho = rho
         self.alpha = alpha
         self.seed = seed
-        self.logdir = logdir
+        self.logdir = None if logdir is None else str(get_model_cache_path("TRA", logdir, C["datacache_path"]))
         self.eval_train = eval_train
         self.eval_test = eval_test
         self.pretrain = pretrain

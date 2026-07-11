@@ -5,6 +5,9 @@ import qlib
 import fire
 
 from datetime import datetime
+from pathlib import Path
+
+from qlib.config import C
 from qlib.constant import REG_CN
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.utils import init_instance_by_config
@@ -17,6 +20,13 @@ class RollingDataWorkflow:
     start_time = "2010-01-01"
     end_time = "2019-12-31"
     rolling_cnt = 5
+
+    @staticmethod
+    def _pre_handler_path() -> Path:
+        """返回 rolling_process_data 专用的统一 Handler cache 路径。"""
+        handler_cache_dir = Path(C["datacache_path"]).expanduser().resolve() / "handler_cache"
+        handler_cache_dir.mkdir(parents=True, exist_ok=True)
+        return handler_cache_dir / "rolling_process_data.pre_handler.pkl"
 
     def _init_qlib(self):
         """initialize qlib"""
@@ -47,8 +57,9 @@ class RollingDataWorkflow:
 
     def rolling_process(self):
         self._init_qlib()
-        self._dump_pre_handler("pre_handler.pkl")
-        pre_handler = self._load_pre_handler("pre_handler.pkl")
+        pre_handler_path = self._pre_handler_path()
+        self._dump_pre_handler(pre_handler_path)
+        pre_handler = self._load_pre_handler(pre_handler_path)
 
         train_start_time = (2010, 1, 1)
         train_end_time = (2012, 12, 31)

@@ -9,7 +9,7 @@ import yaml
 
 from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
 from qlib.contrib.meta.data_selection.model import MetaModelDS
-from qlib.config import C, get_model_cache_dirs
+from qlib.config import C, get_datacache_dir
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.model.meta.task import MetaTask
 from qlib.model.trainer import TrainerR
@@ -123,10 +123,8 @@ class DDGDA(Rolling):
         super().__init__(**kwargs)
         # ═══ DDG-DA 本地缓存分层 ═══
         # 模型中间数据与 Data Handler 分开存放，便于复用和独立清理。
-        default_working_dir, self.handler_cache_dir = get_model_cache_dirs(
-            self.meta_exp_name,
-            C["datacache_path"],
-        )
+        default_working_dir = get_datacache_dir(self.meta_exp_name, C["datacache_path"])
+        self.handler_cache_dir = get_datacache_dir("handler_cache", C["datacache_path"])
         self.working_dir = default_working_dir if working_dir is None else Path(working_dir).expanduser().resolve()
         self.working_dir.mkdir(parents=True, exist_ok=True)
         self.proxy_hd = self.handler_cache_dir / "DDG-DA.handler_proxy.pkl"

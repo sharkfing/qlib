@@ -19,6 +19,8 @@ Get high-frequency data by running the following command:
 
 The High-Frequency Dataset is implemented as `qlib.data.dataset.DatasetH` in the `workflow.py`. `DatatsetH` is the subclass of [`qlib.utils.serial.Serializable`](https://qlib.readthedocs.io/en/latest/advanced/serial.html), whose state can be dumped in or loaded from disk in `pickle` format.
 
+The dumped files are stored in `datacache/highfreq/dataset.pkl` and `datacache/highfreq/dataset_backtest.pkl` instead of the current working directory.
+
 ### About Reinitialization
 
 After reloading `Dataset` from disk, `Qlib` also support reinitializing the dataset. It means that users can reset some states of `Dataset` or `DataHandler` such as `instruments`, `start_time`, `end_time` and `segments`, etc.,  and generate new data according to the states.

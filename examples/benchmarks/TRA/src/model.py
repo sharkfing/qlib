@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from qlib.utils import get_or_create_path
+from qlib.config import C, get_model_cache_path
 from qlib.log import get_module_logger
 from qlib.model.base import Model
 
@@ -75,7 +76,7 @@ class TRAModel(Model):
         self.lamb = lamb
         self.rho = rho
         self.seed = seed
-        self.logdir = logdir
+        self.logdir = None if logdir is None else str(get_model_cache_path("TRA", logdir, C["datacache_path"]))
         self.eval_train = eval_train
         self.eval_test = eval_test
         self.avg_params = avg_params

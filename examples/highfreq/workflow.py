@@ -2,10 +2,11 @@
 #  Licensed under the MIT License.
 
 import fire
+from pathlib import Path
 
 import qlib
 from qlib.constant import REG_CN
-from qlib.config import HIGH_FREQ_CONFIG
+from qlib.config import C, HIGH_FREQ_CONFIG, get_datacache_dir
 
 from qlib.utils import init_instance_by_config
 from qlib.utils.pickle_utils import restricted_pickle_load
@@ -26,6 +27,12 @@ class HighfreqWorkflow:
     end_time = "2021-01-18 16:00:00"
     train_end_time = "2020-11-30 16:00:00"
     test_start_time = "2020-12-01 00:00:00"
+
+    @staticmethod
+    def _dataset_cache_paths() -> tuple[Path, Path]:
+        """返回 HighFreq 训练与回测 Dataset 的统一缓存路径。"""
+        cache_dir = get_datacache_dir("highfreq", C["datacache_path"])
+        return cache_dir / "dataset.pkl", cache_dir / "dataset_backtest.pkl"
 
     DATA_HANDLER_CONFIG0 = {
         "start_time": start_time,
@@ -119,15 +126,16 @@ class HighfreqWorkflow:
         dataset_backtest = init_instance_by_config(self.task["dataset_backtest"])
 
         ##=============dump dataset=============
-        dataset.to_pickle(path="dataset.pkl")
-        dataset_backtest.to_pickle(path="dataset_backtest.pkl")
+        dataset_path, dataset_backtest_path = self._dataset_cache_paths()
+        dataset.to_pickle(path=dataset_path)
+        dataset_backtest.to_pickle(path=dataset_backtest_path)
 
         del dataset, dataset_backtest
         ##=============reload dataset=============
-        with open("dataset.pkl", "rb") as file_dataset:
+        with dataset_path.open("rb") as file_dataset:
             dataset = restricted_pickle_load(file_dataset)
 
-        with open("dataset_backtest.pkl", "rb") as file_dataset_backtest:
+        with dataset_backtest_path.open("rb") as file_dataset_backtest:
             dataset_backtest = restricted_pickle_load(file_dataset_backtest)
 
         self._prepare_calender_cache()

@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from mlflow.tracking._tracking_service import utils as tracking_utils
 
-from qlib.config import C, get_default_mlflow_storage_uris, get_model_cache_dirs
+from qlib.config import C, get_datacache_dir, get_default_mlflow_storage_uris, get_model_cache_path
 from qlib.tests import TestAutoData
 from qlib.workflow import R
 from qlib.workflow.task.utils import replace_task_handler_with_cache
@@ -64,11 +64,21 @@ class HandlerCachePathTest(unittest.TestCase):
         replace_handler.assert_called_once_with(task)
         self.assertIs(result, task)
 
+    def test_tra_relative_logdir_uses_model_cache(self):
+        """TRA 的历史 output/... 配置统一解析到 datacache/TRA。"""
+        with TemporaryDirectory() as temporary_directory:
+            datacache_path = Path(temporary_directory).resolve()
+            logdir = get_model_cache_path("TRA", "output/Alpha158", datacache_path)
+
+            self.assertEqual(logdir, datacache_path / "TRA" / "Alpha158")
+            self.assertTrue(logdir.is_dir())
+
     def test_ddgda_default_working_dir(self):
         """DDG-DA 模型目录与共享 handler_cache 保持同级。"""
         with TemporaryDirectory() as temporary_directory:
             datacache_path = Path(temporary_directory).resolve()
-            model_cache_dir, handler_cache_dir = get_model_cache_dirs("DDG-DA", datacache_path)
+            model_cache_dir = get_datacache_dir("DDG-DA", datacache_path)
+            handler_cache_dir = get_datacache_dir("handler_cache", datacache_path)
 
             self.assertEqual(model_cache_dir, datacache_path / "DDG-DA")
             self.assertEqual(handler_cache_dir, datacache_path / "handler_cache")

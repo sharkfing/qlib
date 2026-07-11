@@ -67,29 +67,67 @@ DEFAULT_DATACACHE_ROOT = Path(
 DEFAULT_DATACACHE_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def get_model_cache_dirs(model_name: str, root_path: Union[str, Path] = DEFAULT_DATACACHE_ROOT) -> tuple[Path, Path]:
-    """创建并返回模型中间数据目录与共享 Data Handler 缓存目录。
+def get_datacache_dir(
+    directory_name: str,
+    root_path: Union[str, Path] = DEFAULT_DATACACHE_ROOT,
+) -> Path:
+    """创建并返回项目级 ``datacache`` 下的指定目录。
 
     Parameters
     ----------
-    model_name : str
-        模型或示例名称，用作 ``datacache`` 下的子目录名。
+    directory_name : str
+        一级子目录名称，例如 ``TRA``、``DDG-DA`` 或 ``handler_cache``。
     root_path : Union[str, Path]
         项目级 ``datacache`` 根目录。
 
     Returns
     -------
-    tuple[Path, Path]
-        模型专用目录与共享 ``handler_cache`` 目录。
+    Path
+        已创建的目录绝对路径。
     """
-    if not model_name or Path(model_name).name != model_name:
-        raise ValueError(f"Invalid model cache directory name: {model_name}")
+    if not directory_name or Path(directory_name).name != directory_name:
+        raise ValueError(f"Invalid datacache directory name: {directory_name}")
     resolved_root = Path(root_path).expanduser().resolve()
-    model_cache_dir = resolved_root / model_name
-    handler_cache_dir = resolved_root / "handler_cache"
-    model_cache_dir.mkdir(parents=True, exist_ok=True)
-    handler_cache_dir.mkdir(parents=True, exist_ok=True)
-    return model_cache_dir, handler_cache_dir
+    cache_dir = resolved_root / directory_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def get_model_cache_path(
+    model_name: str,
+    configured_path: Union[str, Path],
+    root_path: Union[str, Path] = DEFAULT_DATACACHE_ROOT,
+) -> Path:
+    """将模型的相对输出目录解析到项目级 ``datacache``。
+
+    Parameters
+    ----------
+    model_name : str
+        模型名称，例如 ``TRA``。
+    configured_path : Union[str, Path]
+        模型配置中的输出目录。绝对路径保持不变；相对路径统一放入模型目录。
+    root_path : Union[str, Path]
+        项目级 ``datacache`` 根目录。
+
+    Returns
+    -------
+    Path
+        已创建的模型输出目录绝对路径。
+    """
+    output_path = Path(configured_path).expanduser()
+    if output_path.is_absolute():
+        resolved_path = output_path.resolve()
+    else:
+        # 兼容历史配置中的 output/...，避免生成 datacache/TRA/output/... 冗余层级。
+        relative_parts = output_path.parts
+        if relative_parts and relative_parts[0].lower() in {"output", "outputs"}:
+            relative_parts = relative_parts[1:]
+        if ".." in relative_parts:
+            raise ValueError(f"Relative model cache path cannot leave datacache: {configured_path}")
+        model_cache_dir = get_datacache_dir(model_name, root_path)
+        resolved_path = model_cache_dir.joinpath(*relative_parts).resolve()
+    resolved_path.mkdir(parents=True, exist_ok=True)
+    return resolved_path
 
 
 class MLflowSettings(BaseSettings):
