@@ -8,7 +8,10 @@ When rolling train the models, data also needs to be generated in the different 
 
 In order to avoid regenerating data, this example uses the `DataHandler-based DataLoader` to load the raw features that are not related to the rolling window, and then used Processors to generate processed-features related to the rolling window.
 
-The serialized pre-handler is stored in `datacache/handler_cache/rolling_process_data.pre_handler.pkl` instead of the current working directory.
+The example-specific `rolling_handler.Alpha158` keeps the regular Alpha158-style configuration,
+automatically creates or reuses a hash-named raw Handler cache under `datacache/handler_cache`,
+and delegates rolling processing to `RollingDataHandler`. The rolling Processors are not stored
+in the raw cache, so their learnable state is fitted again for each rolling training window.
 
 
 ## Run the Code

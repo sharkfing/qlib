@@ -5,13 +5,10 @@ import qlib
 import fire
 
 from datetime import datetime
-from pathlib import Path
 
-from qlib.config import C
 from qlib.constant import REG_CN
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.utils import init_instance_by_config
-from qlib.utils.pickle_utils import restricted_pickle_load
 from qlib.tests.data import GetData
 
 
@@ -21,45 +18,15 @@ class RollingDataWorkflow:
     end_time = "2019-12-31"
     rolling_cnt = 5
 
-    @staticmethod
-    def _pre_handler_path() -> Path:
-        """返回 rolling_process_data 专用的统一 Handler cache 路径。"""
-        handler_cache_dir = Path(C["datacache_path"]).expanduser().resolve() / "handler_cache"
-        handler_cache_dir.mkdir(parents=True, exist_ok=True)
-        return handler_cache_dir / "rolling_process_data.pre_handler.pkl"
-
     def _init_qlib(self):
-        """initialize qlib"""
+        """初始化示例使用的 Qlib 中国市场数据。"""
         provider_uri = "~/.qlib/qlib_data/cn_data"  # target_dir
         GetData().qlib_data(target_dir=provider_uri, region=REG_CN, exists_skip=True)
         qlib.init(provider_uri=provider_uri, region=REG_CN)
 
-    def _dump_pre_handler(self, path):
-        handler_config = {
-            "class": "Alpha158",
-            "module_path": "qlib.contrib.data.handler",
-            "kwargs": {
-                "start_time": self.start_time,
-                "end_time": self.end_time,
-                "instruments": self.MARKET,
-                "infer_processors": [],
-                "learn_processors": [],
-            },
-        }
-        pre_handler = init_instance_by_config(handler_config)
-        pre_handler.config(dump_all=True)
-        pre_handler.to_pickle(path)
-
-    def _load_pre_handler(self, path):
-        with open(path, "rb") as file_dataset:
-            pre_handler = restricted_pickle_load(file_dataset)
-        return pre_handler
-
     def rolling_process(self):
+        """逐年移动窗口，并利用统一原始 Handler cache 重新拟合 Processor。"""
         self._init_qlib()
-        pre_handler_path = self._pre_handler_path()
-        self._dump_pre_handler(pre_handler_path)
-        pre_handler = self._load_pre_handler(pre_handler_path)
 
         train_start_time = (2010, 1, 1)
         train_end_time = (2012, 12, 31)
@@ -73,9 +40,12 @@ class RollingDataWorkflow:
             "module_path": "qlib.data.dataset",
             "kwargs": {
                 "handler": {
-                    "class": "RollingDataHandler",
+                    "class": "Alpha158",
                     "module_path": "rolling_handler",
                     "kwargs": {
+                        "instruments": self.MARKET,
+                        "data_start_time": self.start_time,
+                        "data_end_time": self.end_time,
                         "start_time": datetime(*train_start_time),
                         "end_time": datetime(*test_end_time),
                         "fit_start_time": datetime(*train_start_time),
@@ -87,9 +57,6 @@ class RollingDataWorkflow:
                             {"class": "DropnaLabel"},
                             {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
                         ],
-                        "data_loader_kwargs": {
-                            "handler_config": pre_handler,
-                        },
                     },
                 },
                 "segments": {

@@ -531,3 +531,21 @@ handler_cache:
 - `Rolling.get_task_list()` 将窗口类型传入 `RollingGen`；非法值会立即抛出 `ValueError`，不会静默回退。
 - `examples/benchmarks_dynamic/baseline/rolling_benchmark.py` 已通过 `**kwargs` 透传命令行参数，无需重复修改。
 - 新增测试，覆盖默认 expanding、显式 sliding 及非法类型三种情况。
+
+## 27. RollingDataHandler 统一管理原始 Handler cache（2026-07-12）
+
+- `examples/rolling_process_data/rolling_handler.py` 新增 `handler_config`、`cache_raw_handler` 和
+  `cache_dir` 参数，通过唯一的 `handler_config` 入口接收原始 Handler 配置、实例或已有缓存 URI。
+- 字典形式的原始 Handler 复用 `replace_task_handler_with_cache()`，按配置 hash 写入
+  `datacache/handler_cache`；已有 URI 或 Handler 实例不会重复缓存。
+- 原始 Handler 的 `infer_processors` 和 `learn_processors` 由内部统一设置为空，外层
+  RollingDataHandler 的 Processor 仍按当前窗口拟合，不会写入共享缓存。
+- `examples/rolling_process_data/workflow.py` 删除固定文件名的手工 dump/load 流程，直接将 Alpha158
+  参数交给新增的 `rolling_handler.Alpha158` 统一入口；不同运行可以复用同一 hash cache。
+- `rolling_handler.Alpha158` 内部构造无 Processor 的原生 Alpha158，并将外层 Processor 交给
+  RollingDataHandler；`label` 参数继续兼容 Rolling 的 horizon 动态覆盖。
+- 原始 cache 使用固定的 `data_start_time/data_end_time`，外层 `start_time/end_time` 可随滚动窗口变化，
+  避免后续窗口超出缓存数据范围。
+- 更新示例 README，并新增测试覆盖缓存路由、URI 复用、Alpha158 包装和 workflow 配置。
+- 真实数据端到端测试通过：首次运行生成 `Alpha158.698fb38724.pkl`（约 445 MB），5 个滚动窗口均完成；
+  第二次运行命中同一缓存，并再次逐窗口执行 RobustZScoreNorm、DropnaLabel 和 CSZScoreNorm。
