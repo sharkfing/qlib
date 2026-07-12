@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         type=positive_int,
         default=None,
-        help="只打印按开始时间倒序排列的最新 N 条 run；不指定时打印全部。",
+        help="选取按开始时间倒序排列的最新 N 条 run，再按 experiment_id 正序打印；不指定时打印全部。",
     )
     parser.add_argument(
         "--db",
@@ -160,12 +160,12 @@ def load_run_rows(
     include_deleted : bool
         是否包含已删除的实验和 run。
     limit : int, optional
-        最多返回按开始时间倒序排列的前 N 条 run；默认返回全部。
+        先选取按开始时间倒序排列的前 N 条 run；最终结果仍按 experiment_id 正序返回。
 
     Returns
     -------
     list[dict[str, str]]
-        已格式化的 run 摘要，每个元素对应一次 run。
+        已格式化的非 FAILED run 摘要，每个元素对应一次 run。
     """
     resolved_database_path = database_path.expanduser().resolve()
     if not resolved_database_path.is_file():
@@ -177,7 +177,11 @@ def load_run_rows(
         "information_ratio": f"{metric_prefix}.information_ratio",
         "max_drawdown": f"{metric_prefix}.max_drawdown",
     }
-    lifecycle_filter = "" if include_deleted else "WHERE e.lifecycle_stage = 'active' AND r.lifecycle_stage = 'active'"
+    # FAILED run 没有可比较的完整结果，默认始终从实验摘要中排除。
+    query_filters = ["COALESCE(r.status, '') <> 'FAILED'"]
+    if not include_deleted:
+        query_filters.extend(["e.lifecycle_stage = 'active'", "r.lifecycle_stage = 'active'"])
+    where_clause = "WHERE " + " AND ".join(query_filters)
 
     limit_clause = " LIMIT ?" if limit is not None else ""
     query = f"""
@@ -230,7 +234,7 @@ def load_run_rows(
           ON legacy_instrument_param.run_uuid = r.run_uuid AND legacy_instrument_param.key = ?
         LEFT JOIN params AS legacy_test_period_param
           ON legacy_test_period_param.run_uuid = r.run_uuid AND legacy_test_period_param.key = ?
-        {lifecycle_filter}
+        {where_clause}
         ORDER BY r.start_time DESC, r.run_uuid
         {limit_clause}
     """
@@ -255,6 +259,15 @@ def load_run_rows(
     database_uri = f"file:{resolved_database_path.as_posix()}?mode=ro"
     with closing(sqlite3.connect(database_uri, uri=True)) as connection:
         records = connection.execute(query, query_parameters).fetchall()
+
+    # LIMIT 仍按开始时间选取“最新 N 条”；选取完成后才调整展示顺序。
+    records.sort(
+        key=lambda record: (
+            int(record[0]),
+            -(record[4] if record[4] is not None else -1),
+            record[2],
+        )
+    )
 
     rows = []
     for record in records:
