@@ -505,3 +505,29 @@ handler_cache:
 - 本项目的 Handler cache 均由用户自己的 Qlib 代码生成，因此安全反序列化器将 `qlib.*` 加入
   受信任模块前缀，允许加载 Alpha158、Processor 和 QlibDataLoader 等内部对象。
 - 保持原有 `Alpha158.<hash>.pkl` 缓存格式，现有 `Alpha158.ebe4fea9c7.pkl` 可以直接复用。
+
+## 24. Rolling 最终拼接 run 元数据（2026-07-12）
+
+- `qlib/contrib/rolling/base.py` 在最终拼接 recorder 中记录模型类型、模型模块、股票池和完整测试区间。
+- 模型与股票池优先读取实际滚动子 run 的 `SignalRecord` 元数据；测试区间读取滚动前的有效任务配置，
+  并兼容 `train_start`、`test_end` 和 `task_ext_conf` 覆盖。
+- 最终 run 使用统一的 `qlib.model.*` 和 `qlib.dataset.*` 参数，`myscripts/summ.py` 无需解析模型 artifact
+  即可显示 `model`、`instrument` 和 `test_period`。
+- 已为现有 `rolling_LGBM_h20_s120` 最终 run 补写元数据，并新增最终拼接元数据测试。
+
+## 25. 实验摘要默认隐藏 Rolling 子 run（2026-07-12）
+
+- `myscripts/summ.py` 默认排除 `rolling_models_*` 中间实验，以及被最终 run 的 `exp_name` 参数
+  引用的自定义 Rolling 子实验。
+- 新增 `--include-child-runs` 开关；只有用户明确指定时才打印中间子 run。
+- 最终 Rolling run 的 `model` 展示增加 `Roll ` 前缀，例如 `Roll LGBModel`；数据库中的真实
+  `qlib.model.class` 仍保持 `LGBModel`。
+- `summ <N>` 仍先选择最新 N 条符合过滤条件的记录，再按 experiment_id 和开始时间正序展示。
+
+## 26. Rolling 支持选择训练窗口类型（2026-07-12）
+
+- `qlib/contrib/rolling/base.py` 为 `Rolling` 新增 `rtype` 参数，默认值仍为 `expanding`，保持原有行为。
+- 可将 `rtype` 设置为 `sliding`，使训练集保持初始窗口长度并随滚动步骤整体向前移动。
+- `Rolling.get_task_list()` 将窗口类型传入 `RollingGen`；非法值会立即抛出 `ValueError`，不会静默回退。
+- `examples/benchmarks_dynamic/baseline/rolling_benchmark.py` 已通过 `**kwargs` 透传命令行参数，无需重复修改。
+- 新增测试，覆盖默认 expanding、显式 sliding 及非法类型三种情况。

@@ -3,7 +3,7 @@
 from copy import deepcopy
 from pathlib import Path
 from ruamel.yaml import YAML
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import fire
 import pandas as pd
@@ -61,6 +61,7 @@ class Rolling:
         test_end: Optional[str] = None,
         task_ext_conf: Optional[dict] = None,
         rolling_exp: Optional[str] = None,
+        rtype: str = RollingGen.ROLL_EX,
     ) -> None:
         """
         Parameters
@@ -87,6 +88,9 @@ class Rolling:
             The name for the experiments for rolling.
             It will contains a lot of record in an experiment. Each record corresponds to a specific rolling.
             Please note that it is different from the final experiments
+        rtype : str
+            滚动训练窗口类型。``expanding`` 固定训练起点并扩展终点；
+            ``sliding`` 保持训练窗口长度不变并整体向前移动。
         """
         self.logger = get_module_logger("Rolling")
         self.conf_path = Path(conf_path)
@@ -94,6 +98,10 @@ class Rolling:
         self._rid = None  # the final combined recorder id in `exp_name`
 
         self.step = step
+        valid_rtypes = {RollingGen.ROLL_EX, RollingGen.ROLL_SD}
+        if rtype not in valid_rtypes:
+            raise ValueError(f"rtype must be one of {sorted(valid_rtypes)}, got {rtype!r}")
+        self.rtype = rtype
         assert horizon is not None, "Current version does not support extracting horizon from the underlying dataset"
         self.horizon = horizon
         if rolling_exp is None:
@@ -195,7 +203,7 @@ class Rolling:
         """return a batch of tasks for rolling."""
         task = self.basic_task()
         task_l = task_generator(
-            task, RollingGen(step=self.step, trunc_days=self.horizon + 1)
+            task, RollingGen(step=self.step, rtype=self.rtype, trunc_days=self.horizon + 1)
         )  # the last two days should be truncated to avoid information leakage
         for t in task_l:
             # when we rolling tasks. No further analyis is needed.
@@ -215,6 +223,73 @@ class Rolling:
         trainer = TrainerR(experiment_name=self.rolling_exp)
         trainer(task_l)
 
+    def _get_final_run_metadata(self) -> Dict[str, str]:
+        """汇总最终滚动 run 使用的模型、股票池和完整测试区间。
+
+        Returns
+        -------
+        Dict[str, str]
+            可直接写入 Recorder params 的标准 ``qlib.*`` 元数据。
+        """
+        metadata: Dict[str, str] = {}
+        shared_keys = (
+            "qlib.model.class",
+            "qlib.model.module",
+            "qlib.dataset.instruments",
+        )
+
+        # 子 run 的 SignalRecord 记录的是实际初始化后的模型和 Handler，优先作为事实来源。
+        for recorder in R.list_recorders(experiment_name=self.rolling_exp).values():
+            child_params = recorder.list_params()
+            for key in shared_keys:
+                value = child_params.get(key)
+                if value is not None and key not in metadata:
+                    metadata[key] = str(value)
+            if all(key in metadata for key in shared_keys):
+                break
+
+        # 配置用于补足自定义 Record 场景，并提供滚动前的完整测试区间。
+        task = deepcopy(self._raw_conf()["task"])
+        task = self._update_start_end_time(task)
+        if self.task_ext_conf is not None:
+            task = update_config(task, self.task_ext_conf)
+
+        model_config = task.get("model", {})
+        if isinstance(model_config, dict):
+            model_class = model_config.get("class")
+            model_module = model_config.get("module_path")
+            if model_class is not None:
+                metadata.setdefault("qlib.model.class", str(model_class))
+            if model_module is not None:
+                metadata.setdefault("qlib.model.module", str(model_module))
+
+        dataset_kwargs = task.get("dataset", {}).get("kwargs", {})
+        handler_config = dataset_kwargs.get("handler")
+        if isinstance(handler_config, dict):
+            instruments = handler_config.get("kwargs", {}).get("instruments")
+            if instruments is not None:
+                metadata.setdefault("qlib.dataset.instruments", str(instruments))
+
+        segments = dataset_kwargs.get("segments", {})
+        test_segment = segments.get("test") if isinstance(segments, dict) else None
+        if isinstance(test_segment, slice):
+            test_start, test_end = test_segment.start, test_segment.stop
+        elif isinstance(test_segment, (list, tuple)) and len(test_segment) == 2:
+            test_start, test_end = test_segment
+        else:
+            test_start = test_end = None
+
+        if test_start is None or test_end is None:
+            self.logger.warning("Cannot extract the complete test segment for the final rolling run.")
+        else:
+            metadata["qlib.dataset.test_start"] = str(test_start)
+            metadata["qlib.dataset.test_end"] = str(test_end)
+
+        for key in shared_keys:
+            if key not in metadata:
+                self.logger.warning(f"Cannot extract {key} for the final rolling run.")
+        return metadata
+
     def _ens_rolling(self):
         rc = RecorderCollector(
             experiment=self.rolling_exp,
@@ -225,7 +300,7 @@ class Rolling:
         )
         res = rc()
         with R.start(experiment_name=self.exp_name):
-            R.log_params(exp_name=self.rolling_exp)
+            R.log_params(exp_name=self.rolling_exp, **self._get_final_run_metadata())
             R.save_objects(**{"pred.pkl": res["pred"], "label.pkl": res["label"]})
             self._rid = R.get_recorder().id
 

@@ -41,16 +41,25 @@ class MlrunsSummaryTest(unittest.TestCase):
                     run_uuid TEXT
                 );
                 INSERT INTO experiments VALUES (1, 'test_exp', 'active');
+                INSERT INTO experiments VALUES (2, 'custom_child_pool', 'active');
+                INSERT INTO experiments VALUES (3, 'rolling_models_pending', 'active');
                 INSERT INTO runs VALUES (
                     'new_run', 'FINISHED', 1700000002000, 1700000003000, 1, 'active'
                 );
                 INSERT INTO runs VALUES (
                     'legacy_run', 'FINISHED', 1700000000000, 1700000001000, 1, 'active'
                 );
+                INSERT INTO runs VALUES (
+                    'custom_child_run', 'FINISHED', 1700000004000, 1700000005000, 2, 'active'
+                );
+                INSERT INTO runs VALUES (
+                    'pending_child_run', 'FINISHED', 1700000006000, 1700000007000, 3, 'active'
+                );
                 INSERT INTO params VALUES ('qlib.model.class', 'LGBModel', 'new_run');
                 INSERT INTO params VALUES ('qlib.dataset.instruments', 'csi300', 'new_run');
                 INSERT INTO params VALUES ('qlib.dataset.test_start', '2017-01-01', 'new_run');
                 INSERT INTO params VALUES ('qlib.dataset.test_end', '2020-08-01', 'new_run');
+                INSERT INTO params VALUES ('exp_name', 'custom_child_pool', 'new_run');
                 INSERT INTO params VALUES ('model.class', 'XGBModel', 'legacy_run');
                 INSERT INTO params VALUES (
                     'dataset.kwargs.handler.kwargs.instruments', 'csi500', 'legacy_run'
@@ -69,12 +78,33 @@ class MlrunsSummaryTest(unittest.TestCase):
 
             rows = load_run_rows(database_path, "1day", include_deleted=False)
 
-        self.assertEqual(rows[0]["model"], "LGBModel")
-        self.assertEqual(rows[0]["instrument"], "csi300")
-        self.assertEqual(rows[0]["test_period"], "2017-01-01~2020-08-01")
-        self.assertEqual(rows[1]["model"], "XGBModel")
-        self.assertEqual(rows[1]["instrument"], "csi500")
-        self.assertEqual(rows[1]["test_period"], "2021-01-01~2022-01-01")
+        rows_by_run_id = {row["run_id"]: row for row in rows}
+        self.assertEqual(rows_by_run_id["new_run"]["model"], "Roll LGBModel")
+        self.assertEqual(rows_by_run_id["new_run"]["instrument"], "csi300")
+        self.assertEqual(rows_by_run_id["new_run"]["test_period"], "2017-01-01~2020-08-01")
+        self.assertEqual(rows_by_run_id["legacy_run"]["model"], "XGBModel")
+        self.assertEqual(rows_by_run_id["legacy_run"]["instrument"], "csi500")
+        self.assertEqual(rows_by_run_id["legacy_run"]["test_period"], "2021-01-01~2022-01-01")
+
+    def test_child_runs_are_hidden_unless_explicitly_requested(self):
+        """默认隐藏引用型和默认前缀型 Rolling 子 run，显式开关可恢复显示。"""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database_path = Path(temporary_directory) / "mlflow.db"
+            self.create_database(database_path)
+
+            default_rows = load_run_rows(database_path, "1day", include_deleted=False)
+            all_rows = load_run_rows(
+                database_path,
+                "1day",
+                include_deleted=False,
+                include_child_runs=True,
+            )
+
+        self.assertEqual({row["run_id"] for row in default_rows}, {"new_run", "legacy_run"})
+        self.assertEqual(
+            {row["run_id"] for row in all_rows},
+            {"new_run", "legacy_run", "custom_child_run", "pending_child_run"},
+        )
 
     def test_markdown_output_has_separate_run_id_column(self):
         """Markdown 应为 experiment_name 和 run_id 分别生成独立列。"""

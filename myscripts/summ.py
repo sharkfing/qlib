@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="同时显示 lifecycle_stage 为 deleted 的实验和 run。",
     )
+    parser.add_argument(
+        "--include-child-runs",
+        action="store_true",
+        help="同时显示 Rolling 训练产生的中间子 run；默认只显示最终拼接结果。",
+    )
     return parser.parse_args()
 
 
@@ -171,6 +176,7 @@ def load_run_rows(
     frequency: str,
     include_deleted: bool,
     limit: Optional[int] = None,
+    include_child_runs: bool = False,
 ) -> List[Dict[str, str]]:
     """从 MLflow SQLite 数据库只读加载每个 run 的摘要。
 
@@ -184,6 +190,8 @@ def load_run_rows(
         是否包含已删除的实验和 run。
     limit : int, optional
         先选取按开始时间倒序排列的前 N 条 run；最终按 experiment_id、开始时间正序返回。
+    include_child_runs : bool
+        是否包含 Rolling 训练产生的中间子 run；默认只保留最终拼接结果。
 
     Returns
     -------
@@ -204,6 +212,20 @@ def load_run_rows(
     query_filters = ["COALESCE(r.status, '') <> 'FAILED'"]
     if not include_deleted:
         query_filters.extend(["e.lifecycle_stage = 'active'", "r.lifecycle_stage = 'active'"])
+    if not include_child_runs:
+        # 默认前缀覆盖尚未生成最终 run 的 Rolling；exp_name 引用兼容自定义 rolling_exp。
+        query_filters.append(
+            """
+            e.name NOT LIKE 'rolling_models_%'
+            AND NOT EXISTS (
+                SELECT 1
+                FROM params AS rolling_parent_param
+                WHERE rolling_parent_param.key = 'exp_name'
+                  AND rolling_parent_param.value = e.name
+                  AND rolling_parent_param.run_uuid <> r.run_uuid
+            )
+            """
+        )
     where_clause = "WHERE " + " AND ".join(query_filters)
 
     limit_clause = " LIMIT ?" if limit is not None else ""
@@ -215,7 +237,12 @@ def load_run_rows(
             COALESCE(r.status, '-') AS status,
             r.start_time,
             r.end_time,
-            COALESCE(model_param.value, legacy_model_param.value) AS model,
+            CASE
+                WHEN rolling_exp_param.value IS NOT NULL
+                 AND COALESCE(model_param.value, legacy_model_param.value) NOT LIKE 'Roll %'
+                THEN 'Roll ' || COALESCE(model_param.value, legacy_model_param.value)
+                ELSE COALESCE(model_param.value, legacy_model_param.value)
+            END AS model,
             COALESCE(instrument_param.value, legacy_instrument_param.value) AS instrument,
             test_start_param.value AS test_start,
             test_end_param.value AS test_end,
@@ -253,6 +280,8 @@ def load_run_rows(
           ON model_param.run_uuid = r.run_uuid AND model_param.key = ?
         LEFT JOIN params AS legacy_model_param
           ON legacy_model_param.run_uuid = r.run_uuid AND legacy_model_param.key = ?
+        LEFT JOIN params AS rolling_exp_param
+          ON rolling_exp_param.run_uuid = r.run_uuid AND rolling_exp_param.key = 'exp_name'
         LEFT JOIN params AS legacy_instrument_param
           ON legacy_instrument_param.run_uuid = r.run_uuid AND legacy_instrument_param.key = ?
         LEFT JOIN params AS legacy_test_period_param
@@ -385,6 +414,7 @@ def main() -> None:
         frequency,
         args.include_deleted,
         args.n,
+        include_child_runs=args.include_child_runs,
     )
     print_table(rows)
     output_path = write_markdown(rows, args.output, args.db, frequency)

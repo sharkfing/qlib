@@ -85,6 +85,139 @@ class HandlerCachePathTest(unittest.TestCase):
             self.assertTrue(handler_cache_dir.is_dir())
 
 
+class RollingFinalMetadataTest(unittest.TestCase):
+    """验证滚动模型的最终拼接 run 会保存完整实验元数据。"""
+
+    @staticmethod
+    def create_rolling():
+        """创建不访问真实配置文件的 Rolling 测试对象。"""
+        from qlib.contrib.rolling.base import Rolling
+
+        rolling = Rolling(
+            conf_path=Path("dummy.yaml"),
+            exp_name="rolling_final",
+            rolling_exp="rolling_children",
+        )
+        rolling._raw_conf = Mock(
+            return_value={
+                "task": {
+                    "model": {
+                        "class": "ConfiguredModel",
+                        "module_path": "configured.model",
+                    },
+                    "dataset": {
+                        "kwargs": {
+                            "handler": {
+                                "class": "ConfiguredHandler",
+                                "kwargs": {"instruments": "configured_market"},
+                            },
+                            "segments": {
+                                "train": ("2008-01-01", "2014-12-31"),
+                                "test": ("2017-01-01", "2020-08-01"),
+                            },
+                        }
+                    },
+                }
+            }
+        )
+        return rolling
+
+    def test_final_metadata_uses_child_run_and_full_test_period(self):
+        """模型和股票池取实际子 run，测试区间取滚动前的完整配置。"""
+        rolling = self.create_rolling()
+        child_recorder = Mock()
+        child_recorder.list_params.return_value = {
+            "qlib.model.class": "LGBModel",
+            "qlib.model.module": "qlib.contrib.model.gbdt",
+            "qlib.dataset.instruments": "csi300",
+            "qlib.dataset.test_start": "2017-01-03",
+            "qlib.dataset.test_end": "2017-06-26",
+        }
+
+        recorder_manager = Mock()
+        recorder_manager.list_recorders.return_value = {"child_run": child_recorder}
+        with patch("qlib.contrib.rolling.base.R", recorder_manager):
+            metadata = rolling._get_final_run_metadata()
+
+        self.assertEqual(
+            metadata,
+            {
+                "qlib.model.class": "LGBModel",
+                "qlib.model.module": "qlib.contrib.model.gbdt",
+                "qlib.dataset.instruments": "csi300",
+                "qlib.dataset.test_start": "2017-01-01",
+                "qlib.dataset.test_end": "2020-08-01",
+            },
+        )
+
+    def test_ensemble_logs_final_metadata(self):
+        """最终 recorder 应在保存拼接预测时同步写入标准元数据。"""
+        rolling = self.create_rolling()
+        metadata = {
+            "qlib.model.class": "LGBModel",
+            "qlib.model.module": "qlib.contrib.model.gbdt",
+            "qlib.dataset.instruments": "csi300",
+            "qlib.dataset.test_start": "2017-01-01",
+            "qlib.dataset.test_end": "2020-08-01",
+        }
+        rolling._get_final_run_metadata = Mock(return_value=metadata)
+        collector = Mock(return_value={"pred": "combined_pred", "label": "combined_label"})
+        final_recorder = Mock(id="final_run")
+        recorder_manager = Mock()
+        recorder_manager.start.return_value.__enter__ = Mock()
+        recorder_manager.start.return_value.__exit__ = Mock(return_value=False)
+        recorder_manager.get_recorder.return_value = final_recorder
+
+        with patch(
+            "qlib.contrib.rolling.base.RecorderCollector", return_value=collector
+        ), patch("qlib.contrib.rolling.base.R", recorder_manager):
+            rolling._ens_rolling()
+
+        recorder_manager.log_params.assert_called_once_with(exp_name="rolling_children", **metadata)
+        recorder_manager.save_objects.assert_called_once_with(
+            **{"pred.pkl": "combined_pred", "label.pkl": "combined_label"}
+        )
+        self.assertEqual(rolling._rid, "final_run")
+
+
+class RollingTypeTest(unittest.TestCase):
+    """验证 Rolling 可以选择 expanding 或 sliding 训练窗口。"""
+
+    def test_default_uses_expanding_window(self):
+        """未指定 rtype 时保持原有 expanding 行为。"""
+        from qlib.contrib.rolling.base import Rolling
+        from qlib.workflow.task.gen import RollingGen
+
+        rolling = Rolling(conf_path=Path("dummy.yaml"))
+
+        self.assertEqual(rolling.rtype, RollingGen.ROLL_EX)
+
+    def test_get_task_list_passes_sliding_type(self):
+        """指定 sliding 后应将该类型传给 RollingGen。"""
+        from qlib.contrib.rolling.base import Rolling
+        from qlib.workflow.task.gen import RollingGen
+
+        rolling = Rolling(conf_path=Path("dummy.yaml"), horizon=20, step=120, rtype=RollingGen.ROLL_SD)
+        rolling.basic_task = Mock(return_value={"record": []})
+        rolling_generator = Mock()
+
+        with patch("qlib.contrib.rolling.base.RollingGen", return_value=rolling_generator) as create_rolling, patch(
+            "qlib.contrib.rolling.base.task_generator", return_value=[]
+        ) as generate_tasks:
+            task_list = rolling.get_task_list()
+
+        self.assertEqual(task_list, [])
+        create_rolling.assert_called_once_with(step=120, rtype=RollingGen.ROLL_SD, trunc_days=21)
+        generate_tasks.assert_called_once_with({"record": []}, rolling_generator)
+
+    def test_invalid_type_is_rejected(self):
+        """非法 rtype 应立即报错，避免静默使用错误窗口。"""
+        from qlib.contrib.rolling.base import Rolling
+
+        with self.assertRaisesRegex(ValueError, "rtype must be one of"):
+            Rolling(conf_path=Path("dummy.yaml"), rtype="unknown")
+
+
 class ModelLogPathTest(unittest.TestCase):
     """验证模型日志统一写入项目级 logs 目录。"""
 
