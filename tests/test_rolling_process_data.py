@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -68,6 +69,8 @@ class RollingDataHandlerTest(unittest.TestCase):
         ), patch.object(DataHandlerLP, "__init__", return_value=None) as initialize_handler:
             RollingDataHandler(
                 handler_config={"class": "Alpha158"},
+                window_start_time="2010-01-01",
+                window_end_time="2017-12-31",
                 infer_processors=[],
                 learn_processors=[],
             )
@@ -78,6 +81,26 @@ class RollingDataHandlerTest(unittest.TestCase):
             data_loader["kwargs"]["handler_config"],
             "file:///C:/cache/Alpha158.test.pkl",
         )
+        self.assertEqual(initialize_handler.call_args.kwargs["start_time"], "2010-01-01")
+        self.assertEqual(initialize_handler.call_args.kwargs["end_time"], "2017-12-31")
+
+    def test_config_maps_window_times_to_data_handler(self):
+        """滚动窗口参数应映射到 DataHandlerLP 的原生读取范围。"""
+        rolling_handler = RollingDataHandler.__new__(RollingDataHandler)
+
+        with patch.object(DataHandlerLP, "config", return_value=None) as configure_handler:
+            rolling_handler.config(
+                window_start_time="2011-01-01",
+                window_end_time="2018-12-31",
+                processor_kwargs={"fit_start_time": "2011-01-01"},
+            )
+
+        configure_handler.assert_called_once_with(
+            start_time="2011-01-01",
+            end_time="2018-12-31",
+            processor_kwargs={"fit_start_time": "2011-01-01"},
+        )
+
 
 class RollingDataWorkflowTest(unittest.TestCase):
     """验证示例工作流通过 RollingDataHandler 统一管理原始缓存。"""
@@ -101,8 +124,10 @@ class RollingDataWorkflowTest(unittest.TestCase):
         handler_kwargs = rolling_handler["kwargs"]
         self.assertEqual(rolling_handler["class"], "Alpha158")
         self.assertEqual(handler_kwargs["instruments"], "csi300")
-        self.assertEqual(handler_kwargs["data_start_time"], "2010-01-01")
-        self.assertEqual(handler_kwargs["data_end_time"], "2019-12-31")
+        self.assertEqual(handler_kwargs["start_time"], "2010-01-01")
+        self.assertEqual(handler_kwargs["end_time"], "2019-12-31")
+        self.assertEqual(handler_kwargs["window_start_time"], datetime(2010, 1, 1))
+        self.assertEqual(handler_kwargs["window_end_time"], datetime(2014, 12, 31))
 
 
 class RollingAlpha158Test(unittest.TestCase):
@@ -117,10 +142,10 @@ class RollingAlpha158Test(unittest.TestCase):
         with patch.object(RollingDataHandler, "__init__", return_value=None) as initialize_handler:
             RollingAlpha158(
                 instruments="csi300",
-                data_start_time="2008-01-01",
-                data_end_time="2020-08-01",
-                start_time="2010-01-01",
-                end_time="2017-12-31",
+                start_time="2008-01-01",
+                end_time="2020-08-01",
+                window_start_time="2010-01-01",
+                window_end_time="2017-12-31",
                 fit_start_time="2010-01-01",
                 fit_end_time="2014-12-31",
                 infer_processors=infer_processors,
@@ -141,8 +166,8 @@ class RollingAlpha158Test(unittest.TestCase):
         self.assertEqual(raw_kwargs["learn_processors"], [])
         self.assertIs(call_kwargs["infer_processors"], infer_processors)
         self.assertIs(call_kwargs["learn_processors"], learn_processors)
-        self.assertEqual(call_kwargs["start_time"], "2010-01-01")
-        self.assertEqual(call_kwargs["end_time"], "2017-12-31")
+        self.assertEqual(call_kwargs["window_start_time"], "2010-01-01")
+        self.assertEqual(call_kwargs["window_end_time"], "2017-12-31")
 
 
 if __name__ == "__main__":

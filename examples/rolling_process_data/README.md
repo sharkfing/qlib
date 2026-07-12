@@ -12,6 +12,9 @@ The example-specific `rolling_handler.Alpha158` keeps the regular Alpha158-style
 automatically creates or reuses a hash-named raw Handler cache under `datacache/handler_cache`,
 and delegates rolling processing to `RollingDataHandler`. The rolling Processors are not stored
 in the raw cache, so their learnable state is fitted again for each rolling training window.
+`start_time` and `end_time` define the fixed full-sample range used by the raw cache, while
+`window_start_time` and `window_end_time` define the data range read by the current rolling task.
+The Processor fitting range remains controlled independently by `fit_start_time` and `fit_end_time`.
 
 
 ## Run the Code

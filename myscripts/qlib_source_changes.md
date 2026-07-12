@@ -544,8 +544,26 @@ handler_cache:
   参数交给新增的 `rolling_handler.Alpha158` 统一入口；不同运行可以复用同一 hash cache。
 - `rolling_handler.Alpha158` 内部构造无 Processor 的原生 Alpha158，并将外层 Processor 交给
   RollingDataHandler；`label` 参数继续兼容 Rolling 的 horizon 动态覆盖。
-- 原始 cache 使用固定的 `data_start_time/data_end_time`，外层 `start_time/end_time` 可随滚动窗口变化，
-  避免后续窗口超出缓存数据范围。
+- 原始 cache 使用固定的 `start_time/end_time`；外层使用 `window_start_time/window_end_time`
+  表示当前滚动任务的读取范围，避免缓存范围与窗口范围混用。
 - 更新示例 README，并新增测试覆盖缓存路由、URI 复用、Alpha158 包装和 workflow 配置。
 - 真实数据端到端测试通过：首次运行生成 `Alpha158.698fb38724.pkl`（约 445 MB），5 个滚动窗口均完成；
   第二次运行命中同一缓存，并再次逐窗口执行 RobustZScoreNorm、DropnaLabel 和 CSZScoreNorm。
+- 时间参数重命名后再次完成 5 个窗口的真实数据测试，仍命中同一 Alpha158 cache，未重新生成原始特征。
+
+## 28. 用户滚动训练脚本 rolling_method（2026-07-13）
+
+- 新增 `myscripts/rolling_method.py`，保留 benchmark 的 Rolling 训练、拼接和回测流程，不修改原
+  `examples/benchmarks_dynamic/baseline/rolling_benchmark.py`。
+- 外层 `rolling_handler.Alpha158` 始终保留为配置字典，不缓存已经拟合的 Processor；原始 Alpha158
+  cache 由 Handler 内部按配置 hash 创建或复用。
+- YAML 只配置固定全样本范围 `start_time/end_time`；每个 RollingGen 子任务根据自身 segments
+  自动注入 `window_start_time/window_end_time` 和 `fit_start_time/fit_end_time`。
+- 任务拆分后会恢复 YAML 中的固定全样本范围，并将窗口范围限制在全样本内，避免
+  `RollingGen.handler_mod` 为末尾子任务扩展原始 Handler cache 的 `end_time`。
+- 时间同步直接复用标准 `train` 和 `test` segments，不再重复实现通用 segment 范围推导。
+- 新增 `myscripts/rolling_method_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、ZScoreNorm、
+  Fillna、DropnaLabel 和 CSZScoreNorm。
+- 新增测试覆盖 horizon 标签、外层缓存跳过、任务时间同步和默认 YAML Processor 配置。
+- 使用真实交易日历预检 `horizon=10、step=240、rtype=sliding`，成功生成 4 个任务，各任务的
+  `fit_start_time/fit_end_time` 均与滑动 train segment 一致；预检未启动模型训练。

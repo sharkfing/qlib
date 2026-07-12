@@ -12,8 +12,8 @@ class RollingDataHandler(DataHandlerLP):
 
     def __init__(
         self,
-        start_time=None,
-        end_time=None,
+        window_start_time=None,
+        window_end_time=None,
         infer_processors=None,
         learn_processors=None,
         fit_start_time=None,
@@ -26,9 +26,9 @@ class RollingDataHandler(DataHandlerLP):
 
         Parameters
         ----------
-        start_time
+        window_start_time
             当前滚动任务读取数据的开始时间。
-        end_time
+        window_end_time
             当前滚动任务读取数据的结束时间。
         infer_processors
             推理数据 Processor 配置；需要拟合的 Processor 使用当前训练窗口。
@@ -73,12 +73,35 @@ class RollingDataHandler(DataHandlerLP):
 
         super().__init__(
             instruments=None,
-            start_time=start_time,
-            end_time=end_time,
+            start_time=window_start_time,
+            end_time=window_end_time,
             data_loader=data_loader,
             infer_processors=infer_processors,
             learn_processors=learn_processors,
         )
+
+    def config(self, window_start_time=None, window_end_time=None, **kwargs):
+        """更新滚动窗口，并映射到 DataHandlerLP 的原生时间参数。
+
+        Parameters
+        ----------
+        window_start_time
+            新滚动窗口的开始时间；未指定时不修改现有值。
+        window_end_time
+            新滚动窗口的结束时间；未指定时不修改现有值。
+        **kwargs
+            传给 ``DataHandlerLP.config`` 的其他配置，例如 Processor 拟合区间。
+
+        Returns
+        -------
+        None
+            配置直接更新到当前 Handler 实例。
+        """
+        if window_start_time is not None:
+            kwargs["start_time"] = window_start_time
+        if window_end_time is not None:
+            kwargs["end_time"] = window_end_time
+        super().config(**kwargs)
 
     @staticmethod
     def _prepare_raw_handler_config(
@@ -128,12 +151,12 @@ class Alpha158(RollingDataHandler):
         instruments="csi500",
         start_time=None,
         end_time=None,
+        window_start_time=None,
+        window_end_time=None,
         fit_start_time=None,
         fit_end_time=None,
         infer_processors=None,
         learn_processors=None,
-        data_start_time=None,
-        data_end_time=None,
         freq="day",
         label=None,
         filter_pipe=None,
@@ -149,9 +172,13 @@ class Alpha158(RollingDataHandler):
         instruments
             股票池名称或股票列表。
         start_time
-            当前滚动任务读取数据的开始时间。
+            原始 Alpha158 cache 的固定开始时间。
         end_time
-            当前滚动任务读取数据的结束时间。
+            原始 Alpha158 cache 的固定结束时间。
+        window_start_time
+            当前滚动任务读取数据的开始时间，由滚动任务生成。
+        window_end_time
+            当前滚动任务读取数据的结束时间，由滚动任务生成。
         fit_start_time
             当前 Processor 拟合区间的开始时间。
         fit_end_time
@@ -160,10 +187,6 @@ class Alpha158(RollingDataHandler):
             每个滚动窗口重新拟合的推理数据 Processor。
         learn_processors
             每个滚动窗口重新执行的训练数据 Processor。
-        data_start_time
-            原始 Alpha158 cache 的固定开始时间；默认等于 ``start_time``。
-        data_end_time
-            原始 Alpha158 cache 的固定结束时间；默认等于 ``end_time``。
         freq
             原始 Alpha158 数据频率。
         label
@@ -184,13 +207,11 @@ class Alpha158(RollingDataHandler):
         None
             初始化后的对象由 ``RollingDataHandler`` 负责加载和处理数据。
         """
-        raw_start_time = start_time if data_start_time is None else data_start_time
-        raw_end_time = end_time if data_end_time is None else data_end_time
         raw_kwargs = {
             **raw_handler_kwargs,
             "instruments": instruments,
-            "start_time": raw_start_time,
-            "end_time": raw_end_time,
+            "start_time": start_time,
+            "end_time": end_time,
             "freq": freq,
             "infer_processors": [],
             "learn_processors": [],
@@ -208,8 +229,8 @@ class Alpha158(RollingDataHandler):
             "kwargs": raw_kwargs,
         }
         super().__init__(
-            start_time=start_time,
-            end_time=end_time,
+            window_start_time=window_start_time,
+            window_end_time=window_end_time,
             fit_start_time=fit_start_time,
             fit_end_time=fit_end_time,
             infer_processors=infer_processors,
