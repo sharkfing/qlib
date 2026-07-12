@@ -55,6 +55,7 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
 TRUSTED_MODULE_PREFIXES = (
     "pandas",
     "numpy",
+    "qlib.",
 )
 
 

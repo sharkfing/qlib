@@ -489,3 +489,19 @@ handler_cache:
 - `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 已设置 `eval_train: false`，跳过每轮
   第二次完整遍历训练集。
 - 新增测试，覆盖关闭、默认开启和非法参数类型三种情况。
+
+## 22. GRU Alpha158 复现与 batch 调整（2026-07-12）
+
+- `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 设置 `seed: 42`，固定模型初始化及
+  训练随机状态。
+- 将 `batch_size` 从 800 调整为 2048，减少每个 epoch 的 batch 数量，提高 RTX 5080 的利用率。
+
+## 23. Windows Handler cache file URI 修复（2026-07-12）
+
+- `qlib/utils/mod.py` 使用 `url2pathname()` 将 `file:///C:/...` 转换为 Windows 本地路径，避免
+  原逻辑生成非法的 `\\C:\\...` 路径。
+- 保留 `file://data/...` 相对路径的历史解析行为。
+- 新增带空格文件名的绝对 file URI 加载测试，覆盖 Windows 盘符和 POSIX 路径。
+- 本项目的 Handler cache 均由用户自己的 Qlib 代码生成，因此安全反序列化器将 `qlib.*` 加入
+  受信任模块前缀，允许加载 Alpha158、Processor 和 QlibDataLoader 等内部对象。
+- 保持原有 `Alpha158.<hash>.pkl` 缓存格式，现有 `Alpha158.ebe4fea9c7.pkl` 可以直接复用。

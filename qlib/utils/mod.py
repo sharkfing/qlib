@@ -17,6 +17,7 @@ import sys
 from types import ModuleType
 from typing import Any, Dict, List, Tuple, Union
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from qlib.typehint import InstConf
 from qlib.utils.pickle_utils import restricted_pickle_load
@@ -162,11 +163,12 @@ def init_instance_by_config(
             pr = urlparse(config)
             if pr.scheme == "file":
                 # To enable relative path like file://data/a/b/c.pkl.  pr.netloc will be data
-                path = pr.path
                 if pr.netloc != "":
-                    path = path.lstrip("/")
-
-                pr_path = os.path.join(pr.netloc, path) if bool(pr.path) else pr.netloc
+                    path = pr.path.lstrip("/")
+                    pr_path = os.path.join(pr.netloc, path) if bool(pr.path) else pr.netloc
+                else:
+                    # Windows 的 file:///C:/... 必须转换为 C:\...，不能直接交给 normpath。
+                    pr_path = url2pathname(pr.path)
                 with open(os.path.normpath(pr_path), "rb") as f:
                     return restricted_pickle_load(f)
         else:
