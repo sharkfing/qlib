@@ -305,8 +305,13 @@ def replace_task_handler_with_cache(task: dict, cache_dir: Optional[Union[str, P
     if isinstance(handler, dict):
         hash = hash_args(handler)
         h_path = cache_dir / f"{handler['class']}.{hash[:10]}.pkl"
-        if not h_path.exists():
+        if h_path.exists():
+            get_module_logger("handler_cache").info(f"Data Handler cache hit: {h_path}")
+        else:
+            get_module_logger("handler_cache").info(f"Data Handler cache miss, building: {h_path}")
             h = init_instance_by_config(handler)
             h.to_pickle(h_path, dump_all=True)
         task["dataset"]["kwargs"]["handler"] = h_path.resolve().as_uri()
+    else:
+        get_module_logger("handler_cache").info("Data Handler cache skipped: task already uses a Handler URI")
     return task

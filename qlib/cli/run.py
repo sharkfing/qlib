@@ -16,6 +16,7 @@ from qlib.log import get_module_logger
 from qlib.model.trainer import task_train
 from qlib.utils import set_log_with_config
 from qlib.utils.data import update_config
+from qlib.workflow.task.utils import replace_task_handler_with_cache
 
 set_log_with_config(C.logging_config)
 logger = get_module_logger("qrun", logging.INFO)
@@ -81,6 +82,35 @@ def render_template(config_path: str) -> str:
     # Render the template with the context
     rendered_content = template.render(context)
     return rendered_content
+
+
+def _prepare_task_config(config: dict) -> dict:
+    """根据 qrun 顶层配置决定是否为 task 启用 Data Handler 缓存。
+
+    Parameters
+    ----------
+    config : dict
+        完整 qrun 配置；缓存开关位于 ``handler_cache.enabled``。
+
+    Returns
+    -------
+    dict
+        原始 task，或已将 Handler 替换为缓存文件 URI 的 task 副本。
+    """
+    task_config = config.get("task")
+    handler_cache_config = config.get("handler_cache", {})
+    if not isinstance(handler_cache_config, dict):
+        raise TypeError("handler_cache must be a mapping with an 'enabled' field")
+
+    enabled = handler_cache_config.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise TypeError("handler_cache.enabled must be a boolean")
+    if not enabled:
+        logger.info("Data Handler cache is disabled for this qrun task")
+        return task_config
+
+    logger.info("Data Handler cache is enabled for this qrun task")
+    return replace_task_handler_with_cache(task_config)
 
 
 # workflow handler function
@@ -149,7 +179,8 @@ def workflow(config_path, experiment_name="workflow", uri_folder=None):
 
     if "experiment_name" in config:
         experiment_name = config["experiment_name"]
-    recorder = task_train(config.get("task"), experiment_name=experiment_name)
+    task_config = _prepare_task_config(config)
+    recorder = task_train(task_config, experiment_name=experiment_name)
     recorder.save_objects(config=config)
 
 

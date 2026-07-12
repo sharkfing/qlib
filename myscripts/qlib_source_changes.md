@@ -463,3 +463,19 @@ qlib.dataset.test_end
 - `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 将 `n_jobs` 从 20 调整为 4，
   降低 Windows 创建大量 DataLoader worker 的开销。
 - 不修改 `persistent_workers`，`qlib/contrib/model/pytorch_gru_ts.py` 保持原有实现。
+
+## 20. qrun 可配置 Data Handler 缓存（2026-07-12）
+
+- `qlib/cli/run.py` 支持读取 YAML 顶层的 `handler_cache.enabled`。
+- 启用时，qrun 在调用 `task_train()` 前执行 `replace_task_handler_with_cache()`；未配置时保持
+  原有不缓存行为。
+- `replace_task_handler_with_cache()` 明确记录 cache hit、cache miss 或已有 Handler URI 的跳过状态。
+- `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 已设置：
+
+```yaml
+handler_cache:
+    enabled: true
+```
+
+- 原始 YAML 继续保存为 MLflow 的 `config` artifact，实际使用缓存 URI 的 task 保存为 `task` artifact。
+- 新增 qrun 缓存开关测试，覆盖启用、默认关闭和非法类型三种情况。
