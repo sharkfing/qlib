@@ -447,3 +447,11 @@ qlib.dataset.test_end
 - `SignalRecord` 元数据写入测试通过。
 - tuple 与 slice 两种测试区间表示均通过。
 - `summ.py` 新统一字段与标准 Trainer 旧字段兼容读取测试通过。
+
+### 18. `myscripts` 项目级命令路径
+
+- 在 `.vscode/settings.json` 和 `.vscode/wqlib.code-workspace` 中将
+  `${workspaceFolder}\\myscripts` 加入 VS Code 集成终端的 `PATH`。
+- 新增 `myscripts/summ.cmd`，固定使用
+  `C:\Users\wangyc\.venvs\qlib\Scripts\python.exe` 执行 `summ.py`。
+- 新建 VS Code 终端后，可直接运行 `summ` 或 `summ <N>`。
