@@ -196,7 +196,9 @@ class SignalRecord(RecordTemp):
         }
 
         handler = getattr(self.dataset, "handler", None)
-        instruments = getattr(handler, "instruments", None)
+        instruments = getattr(handler, "metadata_instruments", None)
+        if instruments is None:
+            instruments = getattr(handler, "instruments", None)
         if instruments is None:
             logger.warning("Cannot extract instruments from dataset handler; run metadata will be incomplete.")
         else:

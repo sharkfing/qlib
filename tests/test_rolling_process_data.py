@@ -140,7 +140,7 @@ class RollingAlpha158Test(unittest.TestCase):
         label = ["Ref($close, -11) / Ref($close, -1) - 1"]
 
         with patch.object(RollingDataHandler, "__init__", return_value=None) as initialize_handler:
-            RollingAlpha158(
+            rolling_alpha158 = RollingAlpha158(
                 instruments="csi300",
                 start_time="2008-01-01",
                 end_time="2020-08-01",
@@ -168,6 +168,7 @@ class RollingAlpha158Test(unittest.TestCase):
         self.assertIs(call_kwargs["learn_processors"], learn_processors)
         self.assertEqual(call_kwargs["window_start_time"], "2010-01-01")
         self.assertEqual(call_kwargs["window_end_time"], "2017-12-31")
+        self.assertEqual(rolling_alpha158.metadata_instruments, "csi300")
 
 
 if __name__ == "__main__":

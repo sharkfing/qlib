@@ -372,8 +372,17 @@ class MLflowRecorder(Recorder):
             ("git diff --cached", "code_cached.txt"),
         ]:
             try:
-                out = subprocess.check_output(cmd, shell=True)
-                self.client.log_text(self.id, out.decode(), fname)  # this behaves same as above
+                # 分别捕获 stdout/stderr，保持代码快照可用，同时避免 Git 换行符提示重复刷屏。
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                self.client.log_text(self.id, result.stdout.decode(), fname)  # this behaves same as above
+                if result.stderr:
+                    self.client.log_text(self.id, result.stderr.decode(), f"{fname}.stderr.txt")
             except subprocess.CalledProcessError:
                 logger.info(f"Fail to log the uncommitted code of $CWD({os.getcwd()}) when run {cmd}.")
 

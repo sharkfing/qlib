@@ -4,6 +4,11 @@ import os
 from pathlib import Path
 from typing import Union
 
+if __package__:
+    from ._bootstrap import PROJECT_ROOT
+else:
+    from _bootstrap import PROJECT_ROOT
+
 import fire
 import pandas as pd
 
@@ -12,8 +17,9 @@ from qlib.contrib.rolling.base import Rolling
 from qlib.tests.data import GetData
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+SCRIPT_DIR = PROJECT_ROOT / "myscripts"
 DEFAULT_CONF = SCRIPT_DIR / "rolling_method_lgbm_Alpha158.yaml"
+DEFAULT_PROVIDER_URI = Path("~/.qlib/qlib_data/cn_data").expanduser()
 
 
 class RollingMethod(Rolling):
@@ -134,9 +140,12 @@ class RollingMethod(Rolling):
 
 if __name__ == "__main__":
     qlib_init_kwargs = {}
-    if os.environ.get("PROVIDER_URI", "") == "":
-        GetData().qlib_data(exists_skip=True)
+    provider_uri = os.environ.get("PROVIDER_URI", "")
+    if provider_uri == "":
+        if not DEFAULT_PROVIDER_URI.exists():
+            GetData().qlib_data(target_dir=DEFAULT_PROVIDER_URI)
+        qlib_init_kwargs["provider_uri"] = DEFAULT_PROVIDER_URI
     else:
-        qlib_init_kwargs["provider_uri"] = os.environ["PROVIDER_URI"]
+        qlib_init_kwargs["provider_uri"] = provider_uri
     auto_init(**qlib_init_kwargs)
     fire.Fire(RollingMethod)

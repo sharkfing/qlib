@@ -50,6 +50,19 @@ class SignalRecordMetadataTest(unittest.TestCase):
         self.assertEqual(metadata["qlib.dataset.test_start"], "2021-01-01")
         self.assertEqual(metadata["qlib.dataset.test_end"], "2022-01-01")
 
+    def test_rolling_handler_metadata_instruments_are_supported(self):
+        """滚动外层 Handler 应从专用字段记录原始股票池。"""
+        dataset = SimpleNamespace(
+            handler=SimpleNamespace(instruments=None, metadata_instruments="csi300"),
+            segments={"test": ("2017-01-01", "2020-08-01")},
+        )
+        recorder = Mock()
+
+        SignalRecord(model=DummyModel(), dataset=dataset, recorder=recorder)._log_run_metadata()
+
+        metadata = recorder.log_params.call_args.kwargs
+        self.assertEqual(metadata["qlib.dataset.instruments"], "csi300")
+
 
 if __name__ == "__main__":
     unittest.main()

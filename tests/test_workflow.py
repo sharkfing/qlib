@@ -10,7 +10,30 @@ from mlflow.tracking._tracking_service import utils as tracking_utils
 from qlib.config import C, get_datacache_dir, get_default_mlflow_storage_uris, get_model_cache_path, get_model_log_path
 from qlib.tests import TestAutoData
 from qlib.workflow import R
+from qlib.workflow.recorder import MLflowRecorder
 from qlib.workflow.task.utils import replace_task_handler_with_cache
+
+
+class RecorderCodeSnapshotTest(unittest.TestCase):
+    """验证 recorder 捕获 Git 输出时不会向实验终端写入 stderr。"""
+
+    def test_git_stderr_is_saved_as_separate_artifact(self):
+        """Git warning 应写入独立 artifact，并保持 diff 内容不被污染。"""
+        recorder = MLflowRecorder.__new__(MLflowRecorder)
+        recorder.client = Mock()
+        recorder.id = "test_run"
+        git_result = Mock(stdout=b"code diff", stderr=b"line ending warning")
+
+        with patch("qlib.workflow.recorder.subprocess.run", return_value=git_result) as run_git:
+            recorder._log_uncommitted_code()
+
+        self.assertEqual(run_git.call_count, 3)
+        recorder.client.log_text.assert_any_call("test_run", "code diff", "code_diff.txt")
+        recorder.client.log_text.assert_any_call(
+            "test_run",
+            "line ending warning",
+            "code_diff.txt.stderr.txt",
+        )
 
 
 class HandlerCachePathTest(unittest.TestCase):

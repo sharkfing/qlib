@@ -12,10 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+if __package__:
+    from ._bootstrap import PROJECT_ROOT
+else:
+    from _bootstrap import PROJECT_ROOT
+
 
 # ═══ 默认路径与输出字段 ═══════════════════════════════════════════════════════
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = PROJECT_ROOT / "mlruns" / "mlflow.db"
 DEFAULT_OUTPUT_PATH = PROJECT_ROOT / "myscripts" / "exp_summaries.md"
 

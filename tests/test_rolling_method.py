@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
@@ -7,11 +8,16 @@ from ruamel.yaml import YAML
 
 from qlib.contrib.rolling.base import Rolling
 
+from myscripts._bootstrap import PROJECT_ROOT
 from myscripts.rolling_method import DEFAULT_CONF, RollingMethod
 
 
 class RollingMethodTest(unittest.TestCase):
     """验证用户滚动脚本的缓存边界和任务时间同步。"""
+
+    def test_project_root_is_importable(self):
+        """共享 bootstrap 应将项目根目录加入模块搜索路径。"""
+        self.assertIn(str(PROJECT_ROOT), sys.path)
 
     def test_basic_task_keeps_outer_handler_and_updates_label(self):
         """基础任务应保留滚动 Handler 字典，并按 horizon 更新其 label。"""
@@ -83,7 +89,7 @@ class RollingMethodTest(unittest.TestCase):
         handler = config["task"]["dataset"]["kwargs"]["handler"]
         processor_names = [processor["class"] for processor in handler["kwargs"]["infer_processors"]]
         self.assertEqual(handler["module_path"], "examples.rolling_process_data.rolling_handler")
-        self.assertEqual(processor_names, ["ProcessInf", "ZScoreNorm", "Fillna"])
+        self.assertEqual(processor_names, ["ProcessInf", "RobustZScoreNorm", "Fillna"])
         self.assertEqual(str(handler["kwargs"]["start_time"]), "2008-01-01")
         self.assertEqual(str(handler["kwargs"]["end_time"]), "2020-08-01")
         self.assertNotIn("window_start_time", handler["kwargs"])

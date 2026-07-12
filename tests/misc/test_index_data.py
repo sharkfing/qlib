@@ -1,8 +1,9 @@
+import unittest
+import warnings
+
 import numpy as np
 import pandas as pd
 import qlib.utils.index_data as idd
-
-import unittest
 
 
 class IndexDataTest(unittest.TestCase):
@@ -144,6 +145,17 @@ class IndexDataTest(unittest.TestCase):
         self.assertEqual(np.nanmean(sd1), 2.5)
         self.assertEqual(np.mean(sd1), 2.5)
         self.assertEqual(sd1.mean(), 2.5)
+
+    def test_all_nan_mean_does_not_warn(self):
+        """全 NaN 数据求均值应返回 NaN，且不产生 Mean of empty slice 警告。"""
+        single_data = idd.SingleData([np.nan, np.nan], index=["foo", "bar"])
+
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            warnings.simplefilter("always")
+            result = single_data.mean()
+
+        self.assertTrue(np.isnan(result))
+        self.assertFalse(any("Mean of empty slice" in str(item.message) for item in captured_warnings))
 
 
 if __name__ == "__main__":

@@ -239,3 +239,5 @@ class Alpha158(RollingDataHandler):
             cache_raw_handler=cache_raw_handler,
             cache_dir=cache_dir,
         )
+        # 外层 Handler 的 instruments=None 供 DataLoaderDH 使用；单独保留配置值用于 run 元数据。
+        self.metadata_instruments = instruments

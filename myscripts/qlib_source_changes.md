@@ -562,8 +562,14 @@ handler_cache:
 - 任务拆分后会恢复 YAML 中的固定全样本范围，并将窗口范围限制在全样本内，避免
   `RollingGen.handler_mod` 为末尾子任务扩展原始 Handler cache 的 `end_time`。
 - 时间同步直接复用标准 `train` 和 `test` segments，不再重复实现通用 segment 范围推导。
-- 新增 `myscripts/rolling_method_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、ZScoreNorm、
+- 新增 `myscripts/rolling_method_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、RobustZScoreNorm、
   Fillna、DropnaLabel 和 CSZScoreNorm。
+- `.vscode/settings.json` 为工作区新终端统一设置项目根目录 `PYTHONPATH`，使所有
+  `myscripts` 脚本直接运行时均可导入项目根目录下的 `examples` 等本地模块。
+- 由于终端环境可能被 base/venv 激活流程覆盖，新增共享 `myscripts/_bootstrap.py` 作为代码级保障；
+  `rolling_method.py` 和 `summ.py` 即使在 `PYTHONPATH` 为空时也能直接运行。
+- 减少滚动实验的非异常 warning：已有 Qlib 数据不再重复调用下载器；滚动 Handler 可记录 instrument
+  元数据；Git 换行符提示写入代码快照 artifact 而非终端；全 NaN 均值显式返回 NaN。
 - 新增测试覆盖 horizon 标签、外层缓存跳过、任务时间同步和默认 YAML Processor 配置。
 - 使用真实交易日历预检 `horizon=10、step=240、rtype=sliding`，成功生成 4 个任务，各任务的
   `fit_start_time/fit_end_time` 均与滑动 train segment 一致；预检未启动模型训练。

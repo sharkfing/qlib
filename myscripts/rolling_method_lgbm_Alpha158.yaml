@@ -9,7 +9,7 @@ data_handler_config: &data_handler_config
     instruments: *market
     infer_processors:
         - class: ProcessInf
-        - class: ZScoreNorm
+        - class: RobustZScoreNorm
           kwargs:
               fields_group: feature
         - class: Fillna
