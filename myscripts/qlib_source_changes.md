@@ -564,10 +564,8 @@ handler_cache:
 - 时间同步直接复用标准 `train` 和 `test` segments，不再重复实现通用 segment 范围推导。
 - 新增 `myscripts/rolling_method_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、RobustZScoreNorm、
   Fillna、DropnaLabel 和 CSZScoreNorm。
-- `.vscode/settings.json` 为工作区新终端统一设置项目根目录 `PYTHONPATH`，使所有
-  `myscripts` 脚本直接运行时均可导入项目根目录下的 `examples` 等本地模块。
-- 由于终端环境可能被 base/venv 激活流程覆盖，新增共享 `myscripts/_bootstrap.py` 作为代码级保障；
-  `rolling_method.py` 和 `summ.py` 即使在 `PYTHONPATH` 为空时也能直接运行。
+- qlib 虚拟环境通过 `site-packages/wqlib-project-root.pth` 固定加入项目根目录；所有 `myscripts`
+  脚本无需 `_bootstrap.py` 或 `PYTHONPATH` 即可导入 `examples` 等本地模块。
 - 减少滚动实验的非异常 warning：已有 Qlib 数据不再重复调用下载器；滚动 Handler 可记录 instrument
   元数据；Git 换行符提示写入代码快照 artifact 而非终端；全 NaN 均值显式返回 NaN。
 - 新增测试覆盖 horizon 标签、外层缓存跳过、任务时间同步和默认 YAML Processor 配置。

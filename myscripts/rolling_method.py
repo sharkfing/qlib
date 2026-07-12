@@ -4,11 +4,6 @@ import os
 from pathlib import Path
 from typing import Union
 
-if __package__:
-    from ._bootstrap import PROJECT_ROOT
-else:
-    from _bootstrap import PROJECT_ROOT
-
 import fire
 import pandas as pd
 
@@ -17,7 +12,7 @@ from qlib.contrib.rolling.base import Rolling
 from qlib.tests.data import GetData
 
 
-SCRIPT_DIR = PROJECT_ROOT / "myscripts"
+SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONF = SCRIPT_DIR / "rolling_method_lgbm_Alpha158.yaml"
 DEFAULT_PROVIDER_URI = Path("~/.qlib/qlib_data/cn_data").expanduser()
 
