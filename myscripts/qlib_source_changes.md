@@ -413,3 +413,37 @@ Baostock 重新下载结果：
 - `sh600519` 返回 1 条零值，5 天后同字段、同报告期更新为非零。
 - `sz000725` 返回 22 条零值，其中 14 条随后被同字段、同报告期的非零值修订。
 - 该结果确认占位零来自 Baostock 当前返回，不是旧 CSV 或 `dump_pit.py` 生成。
+
+## 17. 统一记录实验模型与数据集元数据（2026-07-12）
+
+为避免 notebook、Trainer 等不同运行入口遗漏关键实验配置，在
+`qlib/workflow/record_temp.py` 的 `SignalRecord.generate()` 公共入口增加自动记录：
+
+```text
+qlib.model.class
+qlib.model.module
+qlib.dataset.instruments
+qlib.dataset.test_start
+qlib.dataset.test_end
+```
+
+数据直接取自本次预测实际使用的 `model`、`dataset.handler.instruments` 和
+`dataset.segments["test"]`，并写入当前 recorder 的 MLflow params。无法提取时输出明确 warning，
+不使用默认股票池或根据源码猜测。
+
+新增 `myscripts/summ.py`，按 run 打印 MLflow 实验摘要：
+
+- 支持输入 N，仅打印按开始时间倒序排列的最新 N 条 run。
+- 打印模型、instrument、配置测试区间、Rank IC、Rank ICIR，以及扣费后超额收益指标。
+- 优先读取新的 `qlib.*` 统一字段。
+- 兼容标准 Trainer 已有的 `model.class`、`dataset.kwargs.handler.kwargs.instruments` 和
+  `dataset.kwargs.segments.test` 字段。
+- 旧 run 缺少元数据时显示 `-`，不回填、不读取 `pred.pkl` 猜测配置。
+- 每次执行同时刷新 `myscripts/exp_summaries.md`；Markdown 中每个 run 占一条记录，
+  `experiment_name` 与 `run_id` 使用独立列。
+
+验证结果：
+
+- `SignalRecord` 元数据写入测试通过。
+- tuple 与 slice 两种测试区间表示均通过。
+- `summ.py` 新统一字段与标准 Trainer 旧字段兼容读取测试通过。

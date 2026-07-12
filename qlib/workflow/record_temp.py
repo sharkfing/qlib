@@ -187,7 +187,41 @@ class SignalRecord(RecordTemp):
                 raw_label = None
         return raw_label
 
+    def _log_run_metadata(self):
+        """记录当前 run 实际使用的模型类型和 DatasetH 核心配置。"""
+        model_class = type(self.model)
+        metadata = {
+            "qlib.model.class": model_class.__name__,
+            "qlib.model.module": model_class.__module__,
+        }
+
+        handler = getattr(self.dataset, "handler", None)
+        instruments = getattr(handler, "instruments", None)
+        if instruments is None:
+            logger.warning("Cannot extract instruments from dataset handler; run metadata will be incomplete.")
+        else:
+            metadata["qlib.dataset.instruments"] = str(instruments)
+
+        segments = getattr(self.dataset, "segments", None)
+        test_segment = segments.get("test") if isinstance(segments, dict) else None
+        if isinstance(test_segment, slice):
+            test_start, test_end = test_segment.start, test_segment.stop
+        elif isinstance(test_segment, (list, tuple)) and len(test_segment) == 2:
+            test_start, test_end = test_segment
+        else:
+            test_start = test_end = None
+
+        if test_start is None or test_end is None:
+            logger.warning("Cannot extract test segment from dataset; run metadata will be incomplete.")
+        else:
+            metadata["qlib.dataset.test_start"] = str(test_start)
+            metadata["qlib.dataset.test_end"] = str(test_end)
+
+        self.recorder.log_params(**metadata)
+
     def generate(self, **kwargs):
+        # 在预测前统一记录 notebook、Trainer 等不同入口的模型和数据集配置。
+        self._log_run_metadata()
         # generate prediction
         pred = self.model.predict(self.dataset)
         if isinstance(pred, pd.Series):
