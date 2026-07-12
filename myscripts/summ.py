@@ -35,7 +35,6 @@ OUTPUT_COLUMNS = (
     "model",
     "instrument",
     "test_period",
-    "status",
     "start_time",
     "end_time",
     "rank_ic",
@@ -62,7 +61,7 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         type=positive_int,
         default=None,
-        help="选取按开始时间倒序排列的最新 N 条 run，再按 experiment_id 正序打印；不指定时打印全部。",
+        help="选取按开始时间倒序排列的最新 N 条 run，再按 experiment_id、开始时间正序打印；不指定时打印全部。",
     )
     parser.add_argument(
         "--db",
@@ -96,11 +95,35 @@ def timestamp_to_text(timestamp_ms: Optional[int]) -> str:
     return datetime.fromtimestamp(timestamp_ms / 1000).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def metric_to_text(value: Optional[float], is_nan: Optional[int]) -> str:
-    """格式化 MLflow 指标，缺失值和 NaN 显示为短横线。"""
+def metric_to_text(
+    value: Optional[float],
+    is_nan: Optional[int],
+    as_percentage: bool = False,
+    decimal_places: int = 6,
+) -> str:
+    """格式化 MLflow 指标，缺失值和 NaN 显示为短横线。
+
+    Parameters
+    ----------
+    value : float, optional
+        MLflow 保存的指标原始值。
+    is_nan : int, optional
+        MLflow 的 NaN 标记。
+    as_percentage : bool
+        是否将原始小数乘以 100 并添加百分号。
+    decimal_places : int
+        结果保留的小数位数。
+
+    Returns
+    -------
+    str
+        格式化后的指标文本。
+    """
     if value is None or is_nan or math.isnan(value):
         return "-"
-    return f"{value:.6f}"
+    if as_percentage:
+        return f"{value * 100:.{decimal_places}f}%"
+    return f"{value:.{decimal_places}f}"
 
 
 def normalize_date_text(value: Any) -> str:
@@ -160,7 +183,7 @@ def load_run_rows(
     include_deleted : bool
         是否包含已删除的实验和 run。
     limit : int, optional
-        先选取按开始时间倒序排列的前 N 条 run；最终结果仍按 experiment_id 正序返回。
+        先选取按开始时间倒序排列的前 N 条 run；最终按 experiment_id、开始时间正序返回。
 
     Returns
     -------
@@ -260,11 +283,11 @@ def load_run_rows(
     with closing(sqlite3.connect(database_uri, uri=True)) as connection:
         records = connection.execute(query, query_parameters).fetchall()
 
-    # LIMIT 仍按开始时间选取“最新 N 条”；选取完成后才调整展示顺序。
+    # LIMIT 仍按开始时间选取“最新 N 条”；选取完成后再按实验和时间正序展示。
     records.sort(
         key=lambda record: (
             int(record[0]),
-            -(record[4] if record[4] is not None else -1),
+            record[4] if record[4] is not None else -1,
             record[2],
         )
     )
@@ -282,11 +305,15 @@ def load_run_rows(
                 "status": record[3],
                 "start_time": timestamp_to_text(record[4]),
                 "end_time": timestamp_to_text(record[5]),
-                "annualized_return": metric_to_text(record[11], record[12]),
-                "information_ratio": metric_to_text(record[13], record[14]),
-                "max_drawdown": metric_to_text(record[15], record[16]),
-                "rank_ic": metric_to_text(record[17], record[18]),
-                "rank_icir": metric_to_text(record[19], record[20]),
+                "annualized_return": metric_to_text(
+                    record[11], record[12], as_percentage=True, decimal_places=2
+                ),
+                "information_ratio": metric_to_text(record[13], record[14], decimal_places=3),
+                "max_drawdown": metric_to_text(
+                    record[15], record[16], as_percentage=True, decimal_places=2
+                ),
+                "rank_ic": metric_to_text(record[17], record[18], decimal_places=3),
+                "rank_icir": metric_to_text(record[19], record[20], decimal_places=3),
             }
         )
     return rows
