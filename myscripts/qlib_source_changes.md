@@ -457,3 +457,9 @@ qlib.dataset.test_end
 - 项目内不再保留重复的 `myscripts/summ.cmd`；激活 qlib 虚拟环境后，
   无需依赖 VS Code 的项目 PATH 设置。
 - 新建 VS Code 终端后，可直接运行 `summ` 或 `summ <N>`。
+
+## 19. GRU Alpha158 DataLoader worker 调整（2026-07-12）
+
+- `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 将 `n_jobs` 从 20 调整为 4，
+  降低 Windows 创建大量 DataLoader worker 的开销。
+- 不修改 `persistent_workers`，`qlib/contrib/model/pytorch_gru_ts.py` 保持原有实现。
