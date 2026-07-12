@@ -451,7 +451,9 @@ qlib.dataset.test_end
 ### 18. `myscripts` 项目级命令路径
 
 - 在 `.vscode/settings.json` 和 `.vscode/wqlib.code-workspace` 中将
-  `${workspaceFolder}\\myscripts` 加入 VS Code 集成终端的 `PATH`。
-- 新增 `myscripts/summ.cmd`，固定使用
-  `C:\Users\wangyc\.venvs\qlib\Scripts\python.exe` 执行 `summ.py`。
+  `C:\Users\wangyc\wqlib\myscripts` 加入 VS Code 集成终端的 `PATH`。
+- 将命令入口安装到 `C:\Users\wangyc\.venvs\qlib\Scripts\summ.cmd`，
+  固定使用 qlib 虚拟环境执行项目内的 `myscripts/summ.py`。
+- 项目内不再保留重复的 `myscripts/summ.cmd`；激活 qlib 虚拟环境后，
+  无需依赖 VS Code 的项目 PATH 设置。
 - 新建 VS Code 终端后，可直接运行 `summ` 或 `summ <N>`。
