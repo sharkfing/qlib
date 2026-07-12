@@ -479,3 +479,13 @@ handler_cache:
 
 - 原始 YAML 继续保存为 MLflow 的 `config` artifact，实际使用缓存 URI 的 task 保存为 `task` artifact。
 - 新增 qrun 缓存开关测试，覆盖启用、默认关闭和非法类型三种情况。
+
+## 21. GRU 可关闭训练集逐轮评估（2026-07-12）
+
+- `qlib/contrib/model/pytorch_gru_ts.py` 新增 `eval_train` 布尔参数，默认 `True`，保持其他配置
+  的原有行为。
+- `eval_train=False` 时，每个 epoch 只评估验证集；验证指标、early stop 和最佳权重选择逻辑不变，
+  `evals_result["train"]` 保持空列表。
+- `examples/benchmarks/GRU/workflow_config_gru_Alpha158.yaml` 已设置 `eval_train: false`，跳过每轮
+  第二次完整遍历训练集。
+- 新增测试，覆盖关闭、默认开启和非法参数类型三种情况。

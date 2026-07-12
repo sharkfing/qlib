@@ -32,6 +32,8 @@ class GRU(Model):
         input dimension for each time step
     metric: str
         the evaluation metric used in early stop
+    eval_train : bool
+        是否在每个 epoch 后完整评估训练集。
     optimizer : str
         optimizer name
     GPU : str
@@ -52,6 +54,7 @@ class GRU(Model):
         loss="mse",
         optimizer="adam",
         n_jobs=10,
+        eval_train=True,
         GPU=0,
         seed=None,
         **kwargs,
@@ -74,6 +77,9 @@ class GRU(Model):
         self.loss = loss
         self.device = torch.device("cuda:%d" % (GPU) if torch.cuda.is_available() and GPU >= 0 else "cpu")
         self.n_jobs = n_jobs
+        if not isinstance(eval_train, bool):
+            raise TypeError("eval_train must be a boolean")
+        self.eval_train = eval_train
         self.seed = seed
 
         self.logger.info(
@@ -91,6 +97,7 @@ class GRU(Model):
             "\nloss_type : {}"
             "\ndevice : {}"
             "\nn_jobs : {}"
+            "\neval_train : {}"
             "\nuse_GPU : {}"
             "\nseed : {}".format(
                 d_feat,
@@ -106,6 +113,7 @@ class GRU(Model):
                 loss,
                 self.device,
                 n_jobs,
+                eval_train,
                 self.use_gpu,
                 seed,
             )
@@ -254,10 +262,14 @@ class GRU(Model):
             self.logger.info("training...")
             self.train_epoch(train_loader)
             self.logger.info("evaluating...")
-            train_loss, train_score = self.test_epoch(train_loader)
-            val_loss, val_score = self.test_epoch(valid_loader)
-            self.logger.info("train %.6f, valid %.6f" % (train_score, val_score))
-            evals_result["train"].append(train_score)
+            if self.eval_train:
+                train_loss, train_score = self.test_epoch(train_loader)
+                val_loss, val_score = self.test_epoch(valid_loader)
+                self.logger.info("train %.6f, valid %.6f" % (train_score, val_score))
+                evals_result["train"].append(train_score)
+            else:
+                val_loss, val_score = self.test_epoch(valid_loader)
+                self.logger.info("valid %.6f (train evaluation disabled)" % val_score)
             evals_result["valid"].append(val_score)
 
             if val_score > best_score:

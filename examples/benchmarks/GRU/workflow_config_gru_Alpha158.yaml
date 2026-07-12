@@ -66,6 +66,7 @@ task:
             early_stop: 10
             batch_size: 800
             metric: loss
+            eval_train: false
             loss: mse
             n_jobs: 4
             GPU: 0
