@@ -596,3 +596,36 @@ handler_cache:
 - 自定义 DataHandlerLP 保留自身类型写入公共 cache；后续增加具体 `AlphaXXX` 时，将其精确类加入
   安全反序列化白名单，不对自定义 Handler 做转换或使用特殊 cache 文件名。
 - 新增 Alpha360 参数合并、输入配置不变性和通用 workflow 配置测试。
+
+## 31. rolling_method 接入 TrainerRM 多 worker（2026-07-13）
+
+- `myscripts/rolling_method.py` 使用 `worker=0` 表示单进程 `TrainerR`；`worker=n` 且 `n>0`
+  时，单条命令自动启动 n 个 `TrainerRM` 子进程，不再要求用户另开终端。
+- MongoDB 任务池内部复用本次 `rolling_exp`；未显式指定时由父类生成唯一时间戳
+  名称。非空任务池会直接报错，避免新旧实验任务混用。
+- `RollingDataHandler.prepare_raw_handler()` 统一复用底层参数合并和
+  `replace_task_handler_with_cache()`；协调进程在提交任务前预建公共原始 Handler cache，避免多个
+  worker 同时首次写入同一个缓存文件。
+- `start_delay` 表示相邻子进程的启动间隔；主进程先提交任务，再使用 Windows
+  可兼容的 `spawn` 方式错峰启动 worker，并检查每个子进程的退出码。
+- 训练、预测拼接和回测全部成功后自动删除 MongoDB 任务数据；任一环节失败时
+  保留任务池并明确记录名称，便于排查问题。
+- 修正 `TaskManager.query(decode=False)` 未遵守参数的问题；状态统计现在只读取 MongoDB 原始
+  `status`，不再反序列化包含 `MlflowClient` 的 Recorder 结果。
+- TrainerRM 从 MongoDB 取回 `MLflowRecorder` 时可能随 MLflow 版本变化遇到新的运行时类；
+  由于本项目只反序列化自己生成的任务数据，白名单改为信任 `mlflow.*` 包前缀，避免逐个追加类名。
+  该规则不放行 `mlflow_untrusted` 等相似模块，也不能用于反序列化来源不可信的 pickle 数据。
+- 保留现有 rolling segments、逐窗口 Processor 拟合、预测拼接、最终回测和 run 元数据逻辑；
+  暂未增加固定 fit period 模式。
+- 新增单元测试覆盖单进程兼容、缓存预建、非空任务池保护、自动 worker 错峰启动、
+  子进程失败检测、成功清理与失败保留，以及 TaskManager 原始状态查询。
+- 使用同一份 LGBM Alpha158 配置完成单进程与双 worker 真实 rolling 训练（`step=240`、
+  `horizon=10`、`sliding`）。两次最终预测均为 261,207 行，索引、标签及预测值完全一致，
+  预测最大绝对差为 0；Rank IC、Rank ICIR 相同，回测指标仅有约 1e-15 的浮点末位差异。
+- 双 worker 的第二个进程在延迟后成功领取独立窗口；最终 MongoDB 任务状态为 4 个 `done`，
+  协调进程完成预测拼接和回测。该项是旧的独立终端接口测试记录；新接口改为单命令自动管理 worker。
+- 使用新接口再次完成单进程和 `worker=2` 的真实 LGBM Alpha158 对照训练（`step=240`、
+  `horizon=10`、`sliding`）。两次最终预测均为 261,207 行，索引和数值逐元完全相同；
+  Rank IC 均为 0.087607，Rank ICIR 均为 0.644047。
+- 新接口单进程耗时约 127.1 秒，双 worker 耗时约 113.4 秒；双 worker 结束时 4 个任务均为
+  `done`，完成回测后 MongoDB 任务记录数自动清零。

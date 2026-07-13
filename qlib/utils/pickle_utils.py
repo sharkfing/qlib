@@ -52,10 +52,13 @@ SAFE_PICKLE_CLASSES: Set[Tuple[str, str]] = {
 }
 
 
+# TrainerRM 会将 MLflowRecorder 及其运行时对象写入 MongoDB。项目只读取自己
+# 生成的任务数据，因此信任整个 mlflow 包，避免 MLflow 升级后逐个补充类名。
 TRUSTED_MODULE_PREFIXES = (
     "pandas",
     "numpy",
     "qlib.",
+    "mlflow.",
 )
 
 

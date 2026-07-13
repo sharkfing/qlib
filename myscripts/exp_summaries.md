@@ -1,6 +1,6 @@
 # Qlib Experiment Summaries
 
-- Generated at: `2026-07-13 01:35:36 +0800`
+- Generated at: `2026-07-13 12:03:05 +0800`
 - MLflow database: `C:\Users\wangyc\wqlib\mlruns\mlflow.db`
 - Metric frequency: `1day`
 
@@ -13,3 +13,4 @@
 | 5 | rolling_LGBM_h20_s120 | 80811023d573405ca28082d42d35d792 | Roll LGBModel | csi300 | 2017-01-01~2020-08-01 | 2026-07-12 19:24:24 | 2026-07-12 19:24:24 | 0.095 | 0.640 | 8.34% | 1.380 | -5.52% |
 | 7 | rolling_LGBM_SD_h10_s240 | be82205986e84e4699a6543be861c29a | Roll LGBModel | csi300 | 2017-01-01~2020-08-01 | 2026-07-12 21:57:29 | 2026-07-12 21:57:29 | 0.088 | 0.653 | 15.93% | 2.237 | -5.08% |
 | 13 | rolling_LGBM_RobustZScore_Alpha158_h10_s240 | a3034020b1de4c2a9c8bedc993198492 | Roll LGBModel | csi300 | 2017-01-01~2020-08-01 | 2026-07-13 01:34:26 | 2026-07-13 01:34:27 | 0.088 | 0.644 | 12.85% | 1.846 | -8.18% |
+| 15 | Experiment | c9a4ad2b585d4ed1a1bea6ea19b65d93 | Roll LGBModel | csi300 | 2017-01-01~2020-08-01 | 2026-07-13 12:02:22 | 2026-07-13 12:02:22 | 0.088 | 0.644 | 12.85% | 1.846 | -8.18% |

@@ -41,12 +41,12 @@ def contains_dataframe(value, visited=None):
 class RollingDataHandlerTest(unittest.TestCase):
     """验证 RollingDataHandler 仅缓存原始 Handler，并保留滚动 Processor。"""
 
-    def test_raw_handler_config_uses_shared_cache(self):
-        """字典形式的原始 Handler 应清空 Processor 后交给统一缓存工具。"""
+    def test_prepare_raw_handler_uses_shared_cache(self):
+        """公共入口应合并参数、清空 Processor，再交给统一缓存工具。"""
         handler_config = {
             "class": "Alpha158",
             "module_path": "qlib.contrib.data.handler",
-            "kwargs": {"instruments": "csi300"},
+            "kwargs": {"custom_flag": True},
         }
         cached_uri = "file:///C:/cache/Alpha158.test.pkl"
         cached_task = {"dataset": {"kwargs": {"handler": cached_uri}}}
@@ -56,8 +56,13 @@ class RollingDataHandlerTest(unittest.TestCase):
             "examples.rolling_process_data.rolling_handler.replace_task_handler_with_cache",
             return_value=cached_task,
         ) as replace_handler:
-            result = RollingDataHandler._prepare_raw_handler_config(
+            result = RollingDataHandler.prepare_raw_handler(
                 handler_config=handler_config,
+                instruments="csi300",
+                start_time="2008-01-01",
+                end_time="2020-08-01",
+                label=["LABEL"],
+                freq="day",
                 cache_raw_handler=True,
                 cache_dir=cache_dir,
             )
@@ -65,9 +70,15 @@ class RollingDataHandlerTest(unittest.TestCase):
         cache_task = replace_handler.call_args.args[0]
         raw_kwargs = cache_task["dataset"]["kwargs"]["handler"]["kwargs"]
         self.assertEqual(result, cached_uri)
+        self.assertEqual(raw_kwargs["instruments"], "csi300")
+        self.assertEqual(raw_kwargs["start_time"], "2008-01-01")
+        self.assertEqual(raw_kwargs["end_time"], "2020-08-01")
+        self.assertEqual(raw_kwargs["label"], ["LABEL"])
+        self.assertEqual(raw_kwargs["freq"], "day")
+        self.assertTrue(raw_kwargs["custom_flag"])
         self.assertEqual(raw_kwargs["infer_processors"], [])
         self.assertEqual(raw_kwargs["learn_processors"], [])
-        self.assertNotIn("infer_processors", handler_config["kwargs"])
+        self.assertEqual(handler_config["kwargs"], {"custom_flag": True})
         replace_handler.assert_called_once_with(cache_task, cache_dir=cache_dir)
 
     def test_common_kwargs_are_merged_into_alpha360_config(self):
@@ -79,13 +90,14 @@ class RollingDataHandlerTest(unittest.TestCase):
         }
         label = ["Ref($close, -6) / Ref($close, -1) - 1"]
 
-        merged_handler = RollingDataHandler._merge_handler_config(
+        merged_handler = RollingDataHandler.prepare_raw_handler(
             handler_config=handler_config,
             instruments="csi300",
             start_time="2008-01-01",
             end_time="2020-08-01",
             label=label,
             freq="day",
+            cache_raw_handler=False,
         )
 
         merged_kwargs = merged_handler["kwargs"]
@@ -96,12 +108,14 @@ class RollingDataHandlerTest(unittest.TestCase):
         self.assertEqual(merged_kwargs["label"], label)
         self.assertEqual(merged_kwargs["freq"], "day")
         self.assertTrue(merged_kwargs["custom_flag"])
+        self.assertEqual(merged_kwargs["infer_processors"], [])
+        self.assertEqual(merged_kwargs["learn_processors"], [])
         self.assertEqual(handler_config["kwargs"], {"custom_flag": True})
 
     def test_existing_cache_uri_rejects_handler_overrides(self):
         """已有 cache URI 无法接受参数覆盖时应明确报错。"""
         with self.assertRaisesRegex(ValueError, "Cannot apply common Handler parameters"):
-            RollingDataHandler._merge_handler_config(
+            RollingDataHandler.prepare_raw_handler(
                 handler_config="file:///C:/cache/Alpha360.pkl",
                 instruments="csi300",
             )
@@ -113,7 +127,7 @@ class RollingDataHandlerTest(unittest.TestCase):
         with patch(
             "examples.rolling_process_data.rolling_handler.replace_task_handler_with_cache"
         ) as replace_handler:
-            result = RollingDataHandler._prepare_raw_handler_config(
+            result = RollingDataHandler.prepare_raw_handler(
                 handler_config=handler_uri,
                 cache_raw_handler=True,
                 cache_dir=None,
@@ -126,7 +140,7 @@ class RollingDataHandlerTest(unittest.TestCase):
         """外层 Processor 与原始缓存 URI 应分别交给 Handler 和延迟 Loader。"""
         with patch.object(
             RollingDataHandler,
-            "_prepare_raw_handler_config",
+            "prepare_raw_handler",
             return_value="file:///C:/cache/Alpha158.test.pkl",
         ), patch.object(DataHandlerLP, "__init__", return_value=None) as initialize_handler:
             RollingDataHandler(

@@ -328,6 +328,8 @@ class TaskManager:
         query: dict
             the dict of query
         decode: bool
+            是否反序列化任务的 ``def`` 和 ``res`` 字段。状态统计应使用
+            ``False``，避免加载不需要的任务对象。
 
         Returns
         -------
@@ -336,7 +338,9 @@ class TaskManager:
         query = query.copy()
         query = self._decode_query(query)
         for t in self.task_pool.find(query):
-            yield self._decode_task(t)
+            # 状态统计等只读场景不需要反序列化 def/res；既减少开销，也避免
+            # 因结果对象包含未列入安全白名单的运行时对象而导致查询失败。
+            yield self._decode_task(t) if decode else t
 
     def re_query(self, _id) -> dict:
         """

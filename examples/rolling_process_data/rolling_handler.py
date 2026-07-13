@@ -149,16 +149,13 @@ class RollingDataHandler(DataHandlerLP):
         if handler_config is None:
             raise ValueError("handler_config is required")
 
-        merged_handler_config = self._merge_handler_config(
+        prepared_handler_config = self.prepare_raw_handler(
             handler_config=handler_config,
             instruments=instruments,
             start_time=start_time,
             end_time=end_time,
             label=label,
             freq=freq,
-        )
-        prepared_handler_config = self._prepare_raw_handler_config(
-            handler_config=merged_handler_config,
             cache_raw_handler=cache_raw_handler,
             cache_dir=cache_dir,
         )
@@ -185,26 +182,28 @@ class RollingDataHandler(DataHandlerLP):
             infer_processors=infer_processors,
             learn_processors=learn_processors,
         )
-        if instruments is None and isinstance(merged_handler_config, dict):
-            instruments = merged_handler_config.get("kwargs", {}).get("instruments")
+        if instruments is None and isinstance(handler_config, dict):
+            instruments = handler_config.get("kwargs", {}).get("instruments")
         # 外层 Handler 的 instruments=None 供底层 cache Loader 使用；单独保留 run 元数据。
         self.metadata_instruments = instruments
 
     @staticmethod
-    def _merge_handler_config(
+    def prepare_raw_handler(
         handler_config,
         instruments=None,
         start_time=None,
         end_time=None,
         label=None,
         freq=None,
+        cache_raw_handler: bool = True,
+        cache_dir: Optional[Union[str, Path]] = None,
     ):
-        """将通用数据参数合并到底层 Handler 配置。
+        """合并底层 Handler 参数，并按需创建或复用公共原始缓存。
 
         Parameters
         ----------
         handler_config
-            底层 Data Handler 配置、实例或已有缓存 URI。
+            原始 Data Handler 配置、实例或已有缓存 URI。
         instruments
             股票池覆盖值。
         start_time
@@ -215,30 +214,17 @@ class RollingDataHandler(DataHandlerLP):
             标签表达式覆盖值。
         freq
             数据频率覆盖值。
+        cache_raw_handler : bool
+            是否将字典形式的原始 Handler 配置写入公共缓存。
+        cache_dir : Optional[Union[str, Path]]
+            自定义缓存目录。
 
         Returns
         -------
         object
-            合并公共参数后的 Handler 配置；非字典输入仅在没有覆盖参数时保持不变。
+            可交给 ``RollingDataLoader`` 或 ``DataLoaderDH`` 使用的配置、实例或缓存 URI。
         """
-        if not isinstance(handler_config, dict):
-            common_kwargs = {
-                "instruments": instruments,
-                "start_time": start_time,
-                "end_time": end_time,
-                "label": label,
-                "freq": freq,
-            }
-            override_keys = [key for key, value in common_kwargs.items() if value is not None]
-            if override_keys:
-                raise ValueError(
-                    "Cannot apply common Handler parameters to an existing cache URI or instance: "
-                    + ", ".join(override_keys)
-                )
-            return handler_config
-
-        merged_handler = deepcopy(handler_config)
-        merged_kwargs = merged_handler.setdefault("kwargs", {})
+        # 已有 Handler URI 或实例无法再接收字典参数覆盖。
         common_kwargs = {
             "instruments": instruments,
             "start_time": start_time,
@@ -246,46 +232,35 @@ class RollingDataHandler(DataHandlerLP):
             "label": label,
             "freq": freq,
         }
-        for key, value in common_kwargs.items():
-            if value is not None:
-                merged_kwargs[key] = value
-        return merged_handler
-
-    @staticmethod
-    def _prepare_raw_handler_config(
-        handler_config,
-        cache_raw_handler: bool,
-        cache_dir: Optional[Union[str, Path]],
-    ):
-        """规范化原始 Handler，并按需返回共享缓存 URI。
-
-        Parameters
-        ----------
-        handler_config
-            原始 Data Handler 配置、实例或已有缓存 URI。
-        cache_raw_handler : bool
-            是否缓存字典形式的 Handler 配置。
-        cache_dir : Optional[Union[str, Path]]
-            自定义缓存目录。
-
-        Returns
-        -------
-        object
-            可直接传入 ``DataLoaderDH`` 的 Handler 配置、实例或 URI。
-        """
-        if not isinstance(cache_raw_handler, bool):
-            raise TypeError("cache_raw_handler must be a boolean")
         if not isinstance(handler_config, dict):
+            override_keys = [key for key, value in common_kwargs.items() if value is not None]
+            if override_keys:
+                raise ValueError(
+                    "Cannot apply common Handler parameters to an existing cache URI or instance: "
+                    + ", ".join(override_keys)
+                )
+            if not isinstance(cache_raw_handler, bool):
+                raise TypeError("cache_raw_handler must be a boolean")
             return handler_config
 
+        # 复制后合并外层参数，避免修改 YAML 解析出的原始配置。
         raw_handler_config = deepcopy(handler_config)
         raw_handler_kwargs = raw_handler_config.setdefault("kwargs", {})
+        for key, value in common_kwargs.items():
+            if value is not None:
+                raw_handler_kwargs[key] = value
+
+        if not isinstance(cache_raw_handler, bool):
+            raise TypeError("cache_raw_handler must be a boolean")
+
+        # 公共缓存只保存未处理的原始特征，滚动 Processor 由外层 Handler 拟合。
         raw_handler_kwargs["infer_processors"] = []
         raw_handler_kwargs["learn_processors"] = []
 
         if not cache_raw_handler:
             return raw_handler_config
 
+        # 复用 Qlib 统一缓存逻辑，并返回生成的 Handler URI。
         cache_task = {"dataset": {"kwargs": {"handler": raw_handler_config}}}
         cached_task = replace_task_handler_with_cache(cache_task, cache_dir=cache_dir)
         return cached_task["dataset"]["kwargs"]["handler"]
