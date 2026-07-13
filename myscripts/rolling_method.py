@@ -28,7 +28,7 @@ from examples.rolling_process_data.rolling_handler import RollingDataHandler
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONF = SCRIPT_DIR / "rolling_method_lgbm_Alpha158.yaml"
+DEFAULT_CONF = SCRIPT_DIR / "rolling_lgbm_Alpha158.yaml"
 DEFAULT_PROVIDER_URI = Path("~/.qlib/qlib_data/cn_data").expanduser()
 
 

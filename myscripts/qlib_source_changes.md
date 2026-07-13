@@ -562,7 +562,7 @@ handler_cache:
 - 任务拆分后会恢复 YAML 中的固定全样本范围，并将窗口范围限制在全样本内，避免
   `RollingGen.handler_mod` 为末尾子任务扩展原始 Handler cache 的 `end_time`。
 - 时间同步直接复用标准 `train` 和 `test` segments，不再重复实现通用 segment 范围推导。
-- 新增 `myscripts/rolling_method_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、RobustZScoreNorm、
+- 新增 `myscripts/rolling_lgbm_Alpha158.yaml`，配置逐窗口执行 ProcessInf、RobustZScoreNorm、
   Fillna、DropnaLabel 和 CSZScoreNorm。
 - qlib 虚拟环境通过 `site-packages/wqlib-project-root.pth` 固定加入项目根目录；所有 `myscripts`
   脚本无需 `_bootstrap.py` 或 `PYTHONPATH` 即可导入 `examples` 等本地模块。
@@ -591,7 +591,7 @@ handler_cache:
   Handler；Alpha158、Alpha360 或自定义特征集合由嵌套的 `handler_config` 选择。
 - `start_time/end_time/instruments/label/freq` 保留在外层配置，兼容 Rolling 的 horizon 覆盖、
   固定全样本范围和 run 元数据；初始化时再统一合并到底层 Handler kwargs。
-- `myscripts/rolling_method_lgbm_Alpha158.yaml` 和 `examples/rolling_process_data/workflow.py` 已迁移到
+- `myscripts/rolling_lgbm_Alpha158.yaml` 和 `examples/rolling_process_data/workflow.py` 已迁移到
   通用配置格式；Alpha158 cache hash 仍为 `6531823050`，继续复用现有公共 cache。
 - 自定义 DataHandlerLP 保留自身类型写入公共 cache；后续增加具体 `AlphaXXX` 时，将其精确类加入
   安全反序列化白名单，不对自定义 Handler 做转换或使用特殊 cache 文件名。
