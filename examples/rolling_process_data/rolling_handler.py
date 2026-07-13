@@ -11,7 +11,7 @@ from qlib.utils.serial import Serializable
 from qlib.workflow.task.utils import replace_task_handler_with_cache
 
 
-class HandlerCacheLoader(DataLoader, Serializable):
+class RollingDataLoader(DataLoader, Serializable):
     """通过公共 Handler cache URI 延迟加载原始数据。"""
 
     def __init__(self, handler_uri: str, fetch_kwargs: Optional[dict] = None):
@@ -149,7 +149,7 @@ class RollingDataHandler(DataHandlerLP):
         if handler_config is None:
             raise ValueError("handler_config is required")
 
-        configured_handler_config = self._configure_handler_config(
+        merged_handler_config = self._merge_handler_config(
             handler_config=handler_config,
             instruments=instruments,
             start_time=start_time,
@@ -158,7 +158,7 @@ class RollingDataHandler(DataHandlerLP):
             freq=freq,
         )
         prepared_handler_config = self._prepare_raw_handler_config(
-            handler_config=configured_handler_config,
+            handler_config=merged_handler_config,
             cache_raw_handler=cache_raw_handler,
             cache_dir=cache_dir,
         )
@@ -167,7 +167,7 @@ class RollingDataHandler(DataHandlerLP):
 
         if isinstance(prepared_handler_config, str):
             # cache URI 只作为引用序列化；实际 Handler 保存在私有延迟加载属性中。
-            data_loader = HandlerCacheLoader(handler_uri=prepared_handler_config)
+            data_loader = RollingDataLoader(handler_uri=prepared_handler_config)
         else:
             # 未启用公共 cache 时保持 DataLoaderDH 对配置或 Handler 实例的兼容。
             data_loader = {
@@ -185,13 +185,13 @@ class RollingDataHandler(DataHandlerLP):
             infer_processors=infer_processors,
             learn_processors=learn_processors,
         )
-        if instruments is None and isinstance(configured_handler_config, dict):
-            instruments = configured_handler_config.get("kwargs", {}).get("instruments")
+        if instruments is None and isinstance(merged_handler_config, dict):
+            instruments = merged_handler_config.get("kwargs", {}).get("instruments")
         # 外层 Handler 的 instruments=None 供底层 cache Loader 使用；单独保留 run 元数据。
         self.metadata_instruments = instruments
 
     @staticmethod
-    def _configure_handler_config(
+    def _merge_handler_config(
         handler_config,
         instruments=None,
         start_time=None,
@@ -229,16 +229,16 @@ class RollingDataHandler(DataHandlerLP):
                 "label": label,
                 "freq": freq,
             }
-            configured_keys = [key for key, value in common_kwargs.items() if value is not None]
-            if configured_keys:
+            override_keys = [key for key, value in common_kwargs.items() if value is not None]
+            if override_keys:
                 raise ValueError(
                     "Cannot apply common Handler parameters to an existing cache URI or instance: "
-                    + ", ".join(configured_keys)
+                    + ", ".join(override_keys)
                 )
             return handler_config
 
-        configured_handler = deepcopy(handler_config)
-        configured_kwargs = configured_handler.setdefault("kwargs", {})
+        merged_handler = deepcopy(handler_config)
+        merged_kwargs = merged_handler.setdefault("kwargs", {})
         common_kwargs = {
             "instruments": instruments,
             "start_time": start_time,
@@ -248,31 +248,8 @@ class RollingDataHandler(DataHandlerLP):
         }
         for key, value in common_kwargs.items():
             if value is not None:
-                configured_kwargs[key] = value
-        return configured_handler
-
-    def config(self, window_start_time=None, window_end_time=None, **kwargs):
-        """更新滚动窗口，并映射到 DataHandlerLP 的原生时间参数。
-
-        Parameters
-        ----------
-        window_start_time
-            新滚动窗口的开始时间；未指定时不修改现有值。
-        window_end_time
-            新滚动窗口的结束时间；未指定时不修改现有值。
-        **kwargs
-            传给 ``DataHandlerLP.config`` 的其他配置，例如 Processor 拟合区间。
-
-        Returns
-        -------
-        None
-            配置直接更新到当前 Handler 实例。
-        """
-        if window_start_time is not None:
-            kwargs["start_time"] = window_start_time
-        if window_end_time is not None:
-            kwargs["end_time"] = window_end_time
-        super().config(**kwargs)
+                merged_kwargs[key] = value
+        return merged_handler
 
     @staticmethod
     def _prepare_raw_handler_config(
@@ -312,3 +289,26 @@ class RollingDataHandler(DataHandlerLP):
         cache_task = {"dataset": {"kwargs": {"handler": raw_handler_config}}}
         cached_task = replace_task_handler_with_cache(cache_task, cache_dir=cache_dir)
         return cached_task["dataset"]["kwargs"]["handler"]
+
+    def config(self, window_start_time=None, window_end_time=None, **kwargs):
+        """更新滚动窗口，并映射到 DataHandlerLP 的原生时间参数。
+
+        Parameters
+        ----------
+        window_start_time
+            新滚动窗口的开始时间；未指定时不修改现有值。
+        window_end_time
+            新滚动窗口的结束时间；未指定时不修改现有值。
+        **kwargs
+            传给 ``DataHandlerLP.config`` 的其他配置，例如 Processor 拟合区间。
+
+        Returns
+        -------
+        None
+            配置直接更新到当前 Handler 实例。
+        """
+        if window_start_time is not None:
+            kwargs["start_time"] = window_start_time
+        if window_end_time is not None:
+            kwargs["end_time"] = window_end_time
+        super().config(**kwargs)

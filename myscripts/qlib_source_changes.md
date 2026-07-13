@@ -574,7 +574,7 @@ handler_cache:
 
 ## 29. Rolling dataset artifact 不再复制原始 Alpha158（2026-07-13）
 
-- `examples/rolling_process_data/rolling_handler.py` 新增 `HandlerCacheLoader`，运行时延迟读取公共
+- `examples/rolling_process_data/rolling_handler.py` 新增 `RollingDataLoader`，运行时延迟读取公共
   Handler cache，序列化时只保留 cache URI 和读取参数。
 - 已加载的原始 Handler 保存在私有 `_handler` 属性；Trainer 设置 `dump_all=False` 后不会把
   Alpha158 DataFrame 写入 MLflow dataset artifact。

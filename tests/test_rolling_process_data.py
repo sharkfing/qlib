@@ -12,7 +12,7 @@ import pandas as pd
 from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
 
-from examples.rolling_process_data.rolling_handler import HandlerCacheLoader, RollingDataHandler
+from examples.rolling_process_data.rolling_handler import RollingDataHandler, RollingDataLoader
 from examples.rolling_process_data.workflow import RollingDataWorkflow
 
 
@@ -79,7 +79,7 @@ class RollingDataHandlerTest(unittest.TestCase):
         }
         label = ["Ref($close, -6) / Ref($close, -1) - 1"]
 
-        configured_handler = RollingDataHandler._configure_handler_config(
+        merged_handler = RollingDataHandler._merge_handler_config(
             handler_config=handler_config,
             instruments="csi300",
             start_time="2008-01-01",
@@ -88,20 +88,20 @@ class RollingDataHandlerTest(unittest.TestCase):
             freq="day",
         )
 
-        configured_kwargs = configured_handler["kwargs"]
-        self.assertEqual(configured_handler["class"], "Alpha360")
-        self.assertEqual(configured_kwargs["instruments"], "csi300")
-        self.assertEqual(configured_kwargs["start_time"], "2008-01-01")
-        self.assertEqual(configured_kwargs["end_time"], "2020-08-01")
-        self.assertEqual(configured_kwargs["label"], label)
-        self.assertEqual(configured_kwargs["freq"], "day")
-        self.assertTrue(configured_kwargs["custom_flag"])
+        merged_kwargs = merged_handler["kwargs"]
+        self.assertEqual(merged_handler["class"], "Alpha360")
+        self.assertEqual(merged_kwargs["instruments"], "csi300")
+        self.assertEqual(merged_kwargs["start_time"], "2008-01-01")
+        self.assertEqual(merged_kwargs["end_time"], "2020-08-01")
+        self.assertEqual(merged_kwargs["label"], label)
+        self.assertEqual(merged_kwargs["freq"], "day")
+        self.assertTrue(merged_kwargs["custom_flag"])
         self.assertEqual(handler_config["kwargs"], {"custom_flag": True})
 
     def test_existing_cache_uri_rejects_handler_overrides(self):
         """已有 cache URI 无法接受参数覆盖时应明确报错。"""
         with self.assertRaisesRegex(ValueError, "Cannot apply common Handler parameters"):
-            RollingDataHandler._configure_handler_config(
+            RollingDataHandler._merge_handler_config(
                 handler_config="file:///C:/cache/Alpha360.pkl",
                 instruments="csi300",
             )
@@ -138,7 +138,7 @@ class RollingDataHandlerTest(unittest.TestCase):
             )
 
         data_loader = initialize_handler.call_args.kwargs["data_loader"]
-        self.assertIsInstance(data_loader, HandlerCacheLoader)
+        self.assertIsInstance(data_loader, RollingDataLoader)
         self.assertEqual(data_loader.handler_uri, "file:///C:/cache/Alpha158.test.pkl")
         self.assertEqual(initialize_handler.call_args.kwargs["start_time"], "2010-01-01")
         self.assertEqual(initialize_handler.call_args.kwargs["end_time"], "2017-12-31")
@@ -190,7 +190,7 @@ class RollingDataHandlerTest(unittest.TestCase):
 
     def test_missing_handler_cache_raises_explicit_error(self):
         """公共 cache 缺失时应暴露 URI，不允许静默回退。"""
-        loader = HandlerCacheLoader("file:///C:/missing/Alpha158.pkl")
+        loader = RollingDataLoader("file:///C:/missing/Alpha158.pkl")
         with patch(
             "examples.rolling_process_data.rolling_handler.init_instance_by_config",
             side_effect=FileNotFoundError("missing"),
