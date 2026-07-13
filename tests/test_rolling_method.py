@@ -20,8 +20,9 @@ class RollingMethodTest(unittest.TestCase):
         task = rolling.basic_task()
 
         handler = task["dataset"]["kwargs"]["handler"]
-        self.assertEqual(handler["class"], "Alpha158")
+        self.assertEqual(handler["class"], "RollingDataHandler")
         self.assertEqual(handler["module_path"], "examples.rolling_process_data.rolling_handler")
+        self.assertEqual(handler["kwargs"]["handler_config"]["class"], "Alpha158")
         self.assertEqual(handler["kwargs"]["label"], ["Ref($close, -11) / Ref($close, -1) - 1"])
         self.assertEqual(str(rolling._full_sample_start_time), "2008-01-01")
         self.assertEqual(str(rolling._full_sample_end_time), "2020-08-01")
@@ -29,6 +30,7 @@ class RollingMethodTest(unittest.TestCase):
         self.assertEqual(str(handler["kwargs"]["window_end_time"]), "2020-08-01")
         self.assertEqual(str(handler["kwargs"]["fit_start_time"]), "2008-01-01")
         self.assertEqual(str(handler["kwargs"]["fit_end_time"]), "2014-12-31")
+        self.assertEqual(handler["kwargs"]["freq"], "day")
 
     def test_task_segments_update_handler_times(self):
         """每个滚动任务应使用自身 segments 设置读取和拟合范围。"""
@@ -68,7 +70,7 @@ class RollingMethodTest(unittest.TestCase):
         """外层 Handler 不应被整体替换为固定 Processor 状态的 PKL。"""
         rolling = RollingMethod.__new__(RollingMethod)
         rolling.logger = Mock()
-        task = {"dataset": {"kwargs": {"handler": {"class": "Alpha158"}}}}
+        task = {"dataset": {"kwargs": {"handler": {"class": "RollingDataHandler"}}}}
 
         result = rolling._replace_handler_with_cache(task)
 
@@ -82,7 +84,9 @@ class RollingMethodTest(unittest.TestCase):
 
         handler = config["task"]["dataset"]["kwargs"]["handler"]
         processor_names = [processor["class"] for processor in handler["kwargs"]["infer_processors"]]
+        self.assertEqual(handler["class"], "RollingDataHandler")
         self.assertEqual(handler["module_path"], "examples.rolling_process_data.rolling_handler")
+        self.assertEqual(handler["kwargs"]["handler_config"]["class"], "Alpha158")
         self.assertEqual(processor_names, ["ProcessInf", "RobustZScoreNorm", "Fillna"])
         self.assertEqual(str(handler["kwargs"]["start_time"]), "2008-01-01")
         self.assertEqual(str(handler["kwargs"]["end_time"]), "2020-08-01")

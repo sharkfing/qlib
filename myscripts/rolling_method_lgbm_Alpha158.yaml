@@ -7,6 +7,11 @@ data_handler_config: &data_handler_config
     start_time: 2008-01-01
     end_time: 2020-08-01
     instruments: *market
+    freq: day
+    handler_config:
+        class: Alpha158
+        module_path: qlib.contrib.data.handler
+        kwargs: {}
     infer_processors:
         - class: ProcessInf
         - class: RobustZScoreNorm
@@ -58,7 +63,7 @@ task:
         module_path: qlib.data.dataset
         kwargs:
             handler:
-                class: Alpha158
+                class: RollingDataHandler
                 module_path: examples.rolling_process_data.rolling_handler
                 kwargs: *data_handler_config
             segments:

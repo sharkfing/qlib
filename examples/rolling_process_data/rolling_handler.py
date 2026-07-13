@@ -97,6 +97,11 @@ class RollingDataHandler(DataHandlerLP):
         fit_start_time=None,
         fit_end_time=None,
         handler_config=None,
+        instruments=None,
+        start_time=None,
+        end_time=None,
+        label=None,
+        freq=None,
         cache_raw_handler: bool = True,
         cache_dir: Optional[Union[str, Path]] = None,
     ):
@@ -118,6 +123,16 @@ class RollingDataHandler(DataHandlerLP):
             Processor 拟合区间的结束时间。
         handler_config
             原始 Data Handler 配置、实例或已有缓存 URI。
+        instruments
+            原始 Handler 使用的股票池；未指定时保留 ``handler_config`` 中的值。
+        start_time
+            原始 Handler cache 的固定开始时间。
+        end_time
+            原始 Handler cache 的固定结束时间。
+        label
+            原始 Handler 使用的标签表达式；支持 Rolling 动态覆盖 horizon。
+        freq
+            原始 Handler 使用的数据频率；未指定时保留其默认值或配置值。
         cache_raw_handler : bool
             是否将字典形式的原始 Handler 配置写入共享 Handler cache。
         cache_dir : Optional[Union[str, Path]]
@@ -134,8 +149,16 @@ class RollingDataHandler(DataHandlerLP):
         if handler_config is None:
             raise ValueError("handler_config is required")
 
-        prepared_handler_config = self._prepare_raw_handler_config(
+        configured_handler_config = self._configure_handler_config(
             handler_config=handler_config,
+            instruments=instruments,
+            start_time=start_time,
+            end_time=end_time,
+            label=label,
+            freq=freq,
+        )
+        prepared_handler_config = self._prepare_raw_handler_config(
+            handler_config=configured_handler_config,
             cache_raw_handler=cache_raw_handler,
             cache_dir=cache_dir,
         )
@@ -162,6 +185,71 @@ class RollingDataHandler(DataHandlerLP):
             infer_processors=infer_processors,
             learn_processors=learn_processors,
         )
+        if instruments is None and isinstance(configured_handler_config, dict):
+            instruments = configured_handler_config.get("kwargs", {}).get("instruments")
+        # 外层 Handler 的 instruments=None 供底层 cache Loader 使用；单独保留 run 元数据。
+        self.metadata_instruments = instruments
+
+    @staticmethod
+    def _configure_handler_config(
+        handler_config,
+        instruments=None,
+        start_time=None,
+        end_time=None,
+        label=None,
+        freq=None,
+    ):
+        """将通用数据参数合并到底层 Handler 配置。
+
+        Parameters
+        ----------
+        handler_config
+            底层 Data Handler 配置、实例或已有缓存 URI。
+        instruments
+            股票池覆盖值。
+        start_time
+            固定数据范围开始时间。
+        end_time
+            固定数据范围结束时间。
+        label
+            标签表达式覆盖值。
+        freq
+            数据频率覆盖值。
+
+        Returns
+        -------
+        object
+            合并公共参数后的 Handler 配置；非字典输入仅在没有覆盖参数时保持不变。
+        """
+        if not isinstance(handler_config, dict):
+            common_kwargs = {
+                "instruments": instruments,
+                "start_time": start_time,
+                "end_time": end_time,
+                "label": label,
+                "freq": freq,
+            }
+            configured_keys = [key for key, value in common_kwargs.items() if value is not None]
+            if configured_keys:
+                raise ValueError(
+                    "Cannot apply common Handler parameters to an existing cache URI or instance: "
+                    + ", ".join(configured_keys)
+                )
+            return handler_config
+
+        configured_handler = deepcopy(handler_config)
+        configured_kwargs = configured_handler.setdefault("kwargs", {})
+        common_kwargs = {
+            "instruments": instruments,
+            "start_time": start_time,
+            "end_time": end_time,
+            "label": label,
+            "freq": freq,
+        }
+        for key, value in common_kwargs.items():
+            if value is not None:
+                configured_kwargs[key] = value
+        return configured_handler
 
     def config(self, window_start_time=None, window_end_time=None, **kwargs):
         """更新滚动窗口，并映射到 DataHandlerLP 的原生时间参数。
@@ -224,103 +312,3 @@ class RollingDataHandler(DataHandlerLP):
         cache_task = {"dataset": {"kwargs": {"handler": raw_handler_config}}}
         cached_task = replace_task_handler_with_cache(cache_task, cache_dir=cache_dir)
         return cached_task["dataset"]["kwargs"]["handler"]
-
-
-class Alpha158(RollingDataHandler):
-    """提供原始特征缓存和滚动 Processor 拟合的统一 Alpha158 Handler。"""
-
-    def __init__(
-        self,
-        instruments="csi500",
-        start_time=None,
-        end_time=None,
-        window_start_time=None,
-        window_end_time=None,
-        fit_start_time=None,
-        fit_end_time=None,
-        infer_processors=None,
-        learn_processors=None,
-        freq="day",
-        label=None,
-        filter_pipe=None,
-        inst_processors=None,
-        cache_raw_handler: bool = True,
-        cache_dir: Optional[Union[str, Path]] = None,
-        **raw_handler_kwargs,
-    ):
-        """初始化支持滚动拟合的 Alpha158。
-
-        Parameters
-        ----------
-        instruments
-            股票池名称或股票列表。
-        start_time
-            原始 Alpha158 cache 的固定开始时间。
-        end_time
-            原始 Alpha158 cache 的固定结束时间。
-        window_start_time
-            当前滚动任务读取数据的开始时间，由滚动任务生成。
-        window_end_time
-            当前滚动任务读取数据的结束时间，由滚动任务生成。
-        fit_start_time
-            当前 Processor 拟合区间的开始时间。
-        fit_end_time
-            当前 Processor 拟合区间的结束时间。
-        infer_processors
-            每个滚动窗口重新拟合的推理数据 Processor。
-        learn_processors
-            每个滚动窗口重新执行的训练数据 Processor。
-        freq
-            原始 Alpha158 数据频率。
-        label
-            原始 Alpha158 标签表达式；支持 Rolling 动态覆盖 horizon。
-        filter_pipe
-            传给原生 Alpha158 的股票过滤器。
-        inst_processors
-            传给原生 Alpha158 DataLoader 的股票 Processor。
-        cache_raw_handler : bool
-            是否创建或复用原始 Alpha158 Handler cache。
-        cache_dir : Optional[Union[str, Path]]
-            原始 Handler cache 目录。
-        **raw_handler_kwargs
-            传给原生 ``qlib.contrib.data.handler.Alpha158`` 的其他参数。
-
-        Returns
-        -------
-        None
-            初始化后的对象由 ``RollingDataHandler`` 负责加载和处理数据。
-        """
-        raw_kwargs = {
-            **raw_handler_kwargs,
-            "instruments": instruments,
-            "start_time": start_time,
-            "end_time": end_time,
-            "freq": freq,
-            "infer_processors": [],
-            "learn_processors": [],
-        }
-        if label is not None:
-            raw_kwargs["label"] = label
-        if filter_pipe is not None:
-            raw_kwargs["filter_pipe"] = filter_pipe
-        if inst_processors is not None:
-            raw_kwargs["inst_processors"] = inst_processors
-
-        raw_handler_config = {
-            "class": "Alpha158",
-            "module_path": "qlib.contrib.data.handler",
-            "kwargs": raw_kwargs,
-        }
-        super().__init__(
-            window_start_time=window_start_time,
-            window_end_time=window_end_time,
-            fit_start_time=fit_start_time,
-            fit_end_time=fit_end_time,
-            infer_processors=infer_processors,
-            learn_processors=learn_processors,
-            handler_config=raw_handler_config,
-            cache_raw_handler=cache_raw_handler,
-            cache_dir=cache_dir,
-        )
-        # 外层 Handler 的 instruments=None 供 DataLoaderDH 使用；单独保留配置值用于 run 元数据。
-        self.metadata_instruments = instruments

@@ -40,12 +40,18 @@ class RollingDataWorkflow:
             "module_path": "qlib.data.dataset",
             "kwargs": {
                 "handler": {
-                    "class": "Alpha158",
+                    "class": "RollingDataHandler",
                     "module_path": "rolling_handler",
                     "kwargs": {
+                        "handler_config": {
+                            "class": "Alpha158",
+                            "module_path": "qlib.contrib.data.handler",
+                            "kwargs": {},
+                        },
                         "instruments": self.MARKET,
                         "start_time": self.start_time,
                         "end_time": self.end_time,
+                        "freq": "day",
                         "window_start_time": datetime(*train_start_time),
                         "window_end_time": datetime(*test_end_time),
                         "fit_start_time": datetime(*train_start_time),

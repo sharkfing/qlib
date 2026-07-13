@@ -48,7 +48,9 @@ class RollingMethod(Rolling):
 
         super().__init__(conf_path=conf_path, horizon=horizon, **kwargs)
         if self.h_path is not None:
-            raise ValueError("rolling_method does not support h_path; raw cache is managed by rolling_handler.Alpha158")
+            raise ValueError(
+                "rolling_method does not support h_path; raw cache is managed by RollingDataHandler"
+            )
 
     def basic_task(self, enable_handler_cache: bool = True) -> dict:
         """构造基础任务，并保存 YAML 中固定的全样本范围。
@@ -116,7 +118,7 @@ class RollingMethod(Rolling):
         dict
             未替换为 PKL URI 的外层任务配置。
         """
-        self.logger.info("Outer rolling Handler cache is skipped; raw Alpha158 cache is managed internally")
+        self.logger.info("Outer rolling Handler cache is skipped; raw Handler cache is managed internally")
         return task
 
     def get_task_list(self) -> list[dict]:

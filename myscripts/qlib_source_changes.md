@@ -584,3 +584,15 @@ handler_cache:
   重新生成相同数据。
 - 使用真实 `Alpha158.6531823050.pkl` 验证：单个 dataset artifact 从约 560.35 MiB 降至
   4,814 bytes（4.701 KiB）；反序列化后生成的 LightGBM 预测与原 `pred.pkl` 逐元素完全一致。
+
+## 30. RollingDataHandler 支持任意底层特征 Handler（2026-07-13）
+
+- 删除 `rolling_handler.Alpha158` 专用包装类，统一使用 `RollingDataHandler` 作为 DatasetH 的外层
+  Handler；Alpha158、Alpha360 或自定义特征集合由嵌套的 `handler_config` 选择。
+- `start_time/end_time/instruments/label/freq` 保留在外层配置，兼容 Rolling 的 horizon 覆盖、
+  固定全样本范围和 run 元数据；初始化时再统一合并到底层 Handler kwargs。
+- `myscripts/rolling_method_lgbm_Alpha158.yaml` 和 `examples/rolling_process_data/workflow.py` 已迁移到
+  通用配置格式；Alpha158 cache hash 仍为 `6531823050`，继续复用现有公共 cache。
+- 自定义 DataHandlerLP 保留自身类型写入公共 cache；后续增加具体 `AlphaXXX` 时，将其精确类加入
+  安全反序列化白名单，不对自定义 Handler 做转换或使用特殊 cache 文件名。
+- 新增 Alpha360 参数合并、输入配置不变性和通用 workflow 配置测试。

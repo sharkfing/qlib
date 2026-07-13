@@ -12,7 +12,6 @@ import pandas as pd
 from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
 
-from examples.rolling_process_data.rolling_handler import Alpha158 as RollingAlpha158
 from examples.rolling_process_data.rolling_handler import HandlerCacheLoader, RollingDataHandler
 from examples.rolling_process_data.workflow import RollingDataWorkflow
 
@@ -70,6 +69,42 @@ class RollingDataHandlerTest(unittest.TestCase):
         self.assertEqual(raw_kwargs["learn_processors"], [])
         self.assertNotIn("infer_processors", handler_config["kwargs"])
         replace_handler.assert_called_once_with(cache_task, cache_dir=cache_dir)
+
+    def test_common_kwargs_are_merged_into_alpha360_config(self):
+        """公共参数应覆盖到底层 Alpha360，且不修改输入配置。"""
+        handler_config = {
+            "class": "Alpha360",
+            "module_path": "qlib.contrib.data.handler",
+            "kwargs": {"custom_flag": True},
+        }
+        label = ["Ref($close, -6) / Ref($close, -1) - 1"]
+
+        configured_handler = RollingDataHandler._configure_handler_config(
+            handler_config=handler_config,
+            instruments="csi300",
+            start_time="2008-01-01",
+            end_time="2020-08-01",
+            label=label,
+            freq="day",
+        )
+
+        configured_kwargs = configured_handler["kwargs"]
+        self.assertEqual(configured_handler["class"], "Alpha360")
+        self.assertEqual(configured_kwargs["instruments"], "csi300")
+        self.assertEqual(configured_kwargs["start_time"], "2008-01-01")
+        self.assertEqual(configured_kwargs["end_time"], "2020-08-01")
+        self.assertEqual(configured_kwargs["label"], label)
+        self.assertEqual(configured_kwargs["freq"], "day")
+        self.assertTrue(configured_kwargs["custom_flag"])
+        self.assertEqual(handler_config["kwargs"], {"custom_flag": True})
+
+    def test_existing_cache_uri_rejects_handler_overrides(self):
+        """已有 cache URI 无法接受参数覆盖时应明确报错。"""
+        with self.assertRaisesRegex(ValueError, "Cannot apply common Handler parameters"):
+            RollingDataHandler._configure_handler_config(
+                handler_config="file:///C:/cache/Alpha360.pkl",
+                instruments="csi300",
+            )
 
     def test_existing_handler_uri_skips_cache_creation(self):
         """已有 Handler URI 应直接复用，不重复构建缓存。"""
@@ -201,54 +236,17 @@ class RollingDataWorkflowTest(unittest.TestCase):
         dataset_config = initialize_dataset.call_args.args[0]
         rolling_handler = dataset_config["kwargs"]["handler"]
         handler_kwargs = rolling_handler["kwargs"]
-        self.assertEqual(rolling_handler["class"], "Alpha158")
+        self.assertEqual(rolling_handler["class"], "RollingDataHandler")
+        self.assertEqual(handler_kwargs["handler_config"]["class"], "Alpha158")
+        self.assertEqual(
+            handler_kwargs["handler_config"]["module_path"],
+            "qlib.contrib.data.handler",
+        )
         self.assertEqual(handler_kwargs["instruments"], "csi300")
         self.assertEqual(handler_kwargs["start_time"], "2010-01-01")
         self.assertEqual(handler_kwargs["end_time"], "2019-12-31")
         self.assertEqual(handler_kwargs["window_start_time"], datetime(2010, 1, 1))
         self.assertEqual(handler_kwargs["window_end_time"], datetime(2014, 12, 31))
-
-
-class RollingAlpha158Test(unittest.TestCase):
-    """验证统一 Alpha158 包装会正确分离原始缓存与滚动 Processor。"""
-
-    def test_wrapper_builds_raw_alpha158_config(self):
-        """包装类应将固定数据范围、标签和股票池传给无 Processor 的原生 Alpha158。"""
-        infer_processors = [{"class": "ZScoreNorm", "kwargs": {"fields_group": "feature"}}]
-        learn_processors = [{"class": "DropnaLabel"}]
-        label = ["Ref($close, -11) / Ref($close, -1) - 1"]
-
-        with patch.object(RollingDataHandler, "__init__", return_value=None) as initialize_handler:
-            rolling_alpha158 = RollingAlpha158(
-                instruments="csi300",
-                start_time="2008-01-01",
-                end_time="2020-08-01",
-                window_start_time="2010-01-01",
-                window_end_time="2017-12-31",
-                fit_start_time="2010-01-01",
-                fit_end_time="2014-12-31",
-                infer_processors=infer_processors,
-                learn_processors=learn_processors,
-                label=label,
-            )
-
-        call_kwargs = initialize_handler.call_args.kwargs
-        raw_handler = call_kwargs["handler_config"]
-        raw_kwargs = raw_handler["kwargs"]
-        self.assertEqual(raw_handler["class"], "Alpha158")
-        self.assertEqual(raw_handler["module_path"], "qlib.contrib.data.handler")
-        self.assertEqual(raw_kwargs["instruments"], "csi300")
-        self.assertEqual(raw_kwargs["start_time"], "2008-01-01")
-        self.assertEqual(raw_kwargs["end_time"], "2020-08-01")
-        self.assertEqual(raw_kwargs["label"], label)
-        self.assertEqual(raw_kwargs["infer_processors"], [])
-        self.assertEqual(raw_kwargs["learn_processors"], [])
-        self.assertIs(call_kwargs["infer_processors"], infer_processors)
-        self.assertIs(call_kwargs["learn_processors"], learn_processors)
-        self.assertEqual(call_kwargs["window_start_time"], "2010-01-01")
-        self.assertEqual(call_kwargs["window_end_time"], "2017-12-31")
-        self.assertEqual(rolling_alpha158.metadata_instruments, "csi300")
-
 
 if __name__ == "__main__":
     unittest.main()
