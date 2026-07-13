@@ -3,8 +3,86 @@ from pathlib import Path
 from typing import Optional, Union
 
 from qlib.contrib.data.handler import check_transform_proc
-from qlib.data.dataset.handler import DataHandlerLP
+from qlib.data.dataset.handler import DataHandler, DataHandlerLP
+from qlib.data.dataset.loader import DataLoader
+from qlib.log import get_module_logger
+from qlib.utils import init_instance_by_config
+from qlib.utils.serial import Serializable
 from qlib.workflow.task.utils import replace_task_handler_with_cache
+
+
+class HandlerCacheLoader(DataLoader, Serializable):
+    """通过公共 Handler cache URI 延迟加载原始数据。"""
+
+    def __init__(self, handler_uri: str, fetch_kwargs: Optional[dict] = None):
+        """初始化只保留 cache 引用的 DataLoader。
+
+        Parameters
+        ----------
+        handler_uri : str
+            公共 Handler cache 的文件 URI。
+        fetch_kwargs : Optional[dict]
+            传给底层 Handler ``fetch`` 方法的参数。
+
+        Returns
+        -------
+        None
+            实际 Handler 在第一次读取数据时才加载。
+        """
+        if not isinstance(handler_uri, str) or not handler_uri:
+            raise TypeError("handler_uri must be a non-empty string")
+
+        Serializable.__init__(self)
+        self.handler_uri = handler_uri
+        self.fetch_kwargs = {"col_set": DataHandler.CS_RAW}
+        if fetch_kwargs is not None:
+            self.fetch_kwargs.update(fetch_kwargs)
+        # 私有属性在 dump_all=False 时不会写入 MLflow dataset artifact。
+        self._handler = None
+
+    def _get_handler(self) -> DataHandler:
+        """加载并缓存公共 Data Handler。
+
+        Returns
+        -------
+        DataHandler
+            从 ``handler_uri`` 恢复的公共 Handler。
+        """
+        if getattr(self, "_handler", None) is None:
+            try:
+                self._handler = init_instance_by_config(self.handler_uri, accept_types=DataHandler)
+            except FileNotFoundError as exception:
+                raise FileNotFoundError(
+                    f"Handler cache does not exist: {self.handler_uri}"
+                ) from exception
+        return self._handler
+
+    def load(self, instruments=None, start_time=None, end_time=None):
+        """读取指定时间窗口的原始数据。
+
+        Parameters
+        ----------
+        instruments
+            为兼容 DataLoader 接口而保留；公共 Handler 已确定股票池。
+        start_time
+            数据窗口开始时间。
+        end_time
+            数据窗口结束时间。
+
+        Returns
+        -------
+        pandas.DataFrame
+            从公共 Handler cache 读取的原始数据。
+        """
+        if instruments is not None:
+            get_module_logger(self.__class__.__name__).warning(
+                f"instruments[{instruments}] is ignored"
+            )
+        return self._get_handler().fetch(
+            selector=slice(start_time, end_time),
+            level="datetime",
+            **self.fetch_kwargs,
+        )
 
 
 class RollingDataHandler(DataHandlerLP):
@@ -64,12 +142,17 @@ class RollingDataHandler(DataHandlerLP):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
 
-        data_loader = {
-            "class": "DataLoaderDH",
-            "kwargs": {
-                "handler_config": prepared_handler_config,
-            },
-        }
+        if isinstance(prepared_handler_config, str):
+            # cache URI 只作为引用序列化；实际 Handler 保存在私有延迟加载属性中。
+            data_loader = HandlerCacheLoader(handler_uri=prepared_handler_config)
+        else:
+            # 未启用公共 cache 时保持 DataLoaderDH 对配置或 Handler 实例的兼容。
+            data_loader = {
+                "class": "DataLoaderDH",
+                "kwargs": {
+                    "handler_config": prepared_handler_config,
+                },
+            }
 
         super().__init__(
             instruments=None,

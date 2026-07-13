@@ -15,6 +15,9 @@ in the raw cache, so their learnable state is fitted again for each rolling trai
 `start_time` and `end_time` define the fixed full-sample range used by the raw cache, while
 `window_start_time` and `window_end_time` define the data range read by the current rolling task.
 The Processor fitting range remains controlled independently by `fit_start_time` and `fit_end_time`.
+The outer Handler uses a lazy cache loader: MLflow dataset artifacts keep only the cache URI,
+window configuration, and fitted Processor state. The raw Alpha158 DataFrame remains exclusively
+in the shared cache and is loaded again only when an artifact is restored for inference.
 
 
 ## Run the Code

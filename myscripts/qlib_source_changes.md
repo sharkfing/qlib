@@ -571,3 +571,16 @@ handler_cache:
 - 新增测试覆盖 horizon 标签、外层缓存跳过、任务时间同步和默认 YAML Processor 配置。
 - 使用真实交易日历预检 `horizon=10、step=240、rtype=sliding`，成功生成 4 个任务，各任务的
   `fit_start_time/fit_end_time` 均与滑动 train segment 一致；预检未启动模型训练。
+
+## 29. Rolling dataset artifact 不再复制原始 Alpha158（2026-07-13）
+
+- `examples/rolling_process_data/rolling_handler.py` 新增 `HandlerCacheLoader`，运行时延迟读取公共
+  Handler cache，序列化时只保留 cache URI 和读取参数。
+- 已加载的原始 Handler 保存在私有 `_handler` 属性；Trainer 设置 `dump_all=False` 后不会把
+  Alpha158 DataFrame 写入 MLflow dataset artifact。
+- 外层 RollingDataHandler、Processor 拟合状态和 Dataset segments 继续保留，可用于在线推理和
+  实验审计；公共 cache 缺失时明确抛出包含 URI 的 `FileNotFoundError`，不做静默回退。
+- 新增小型数据序列化往返测试，确认 artifact 中不存在 pandas DataFrame，恢复后仍可从 cache
+  重新生成相同数据。
+- 使用真实 `Alpha158.6531823050.pkl` 验证：单个 dataset artifact 从约 560.35 MiB 降至
+  4,814 bytes（4.701 KiB）；反序列化后生成的 LightGBM 预测与原 `pred.pkl` 逐元素完全一致。
