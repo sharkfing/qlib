@@ -1,10 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-"""运行带动态 Processor 拟合和可选 TrainerRM worker 的滚动实验。
+r"""运行带动态 Processor 拟合和可选 TrainerRM worker 的滚动实验。
 
 ``worker=0`` 时使用单进程 TrainerR；``worker=n`` 且 ``n>0`` 时，单条命令会自动
 创建 n 个 TrainerRM 子进程。MongoDB 任务池内部复用本次 ``rolling_exp``，完整
 实验成功后删除任务数据，失败时保留以便排查。
+
+PowerShell 示例：
+
+    python -m myscripts.rolling_method --conf_path=.\myscripts\rolling_lgbm_Alpha158.yaml --rtype=expanding --step=240 --horizon=10 --worker=2 --exp_name=rolling_LGBM_EX_Alpha158_csi300_h10_s240 run
 """
 
 import multiprocessing
@@ -63,7 +67,7 @@ class RollingMethod(Rolling):
         conf_path: Union[str, Path] = DEFAULT_CONF,
         horizon: int = 20,
         worker: int = 0,
-        start_delay: float = 0.0,
+        start_delay: float = 5.0,
         **kwargs,
     ) -> None:
         """初始化滚动模型用户脚本。
