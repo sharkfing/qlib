@@ -54,24 +54,35 @@ def get_default_mlflow_storage_uris(root_path: Union[str, Path]) -> tuple[str, s
     return tracking_uri, artifact_root
 
 
-# ═══ MLflow 本地存储默认值 ═══
-# 开发模式安装时从 qlib 包位置定位源码根目录，避免结果随启动目录漂移。
+# ═══ 工作区与本地存储默认值 ═══
+QLIB_SOURCE_ROOT = Path(__file__).resolve().parents[1]
+_nested_workspace_candidate = QLIB_SOURCE_ROOT.parent
+DEFAULT_WORKSPACE_ROOT = Path(
+    os.environ.get(
+        "WQLIB_WORKSPACE_ROOT",
+        _nested_workspace_candidate
+        if (_nested_workspace_candidate / "myscripts").is_dir()
+        else QLIB_SOURCE_ROOT,
+    )
+).expanduser().resolve()
+
+# 开发模式安装时优先识别包含 qlib 子仓库的外层研究工作区。
 DEFAULT_MLFLOW_ROOT = Path(
-    os.environ.get("QLIB_MLFLOW_ROOT", Path(__file__).resolve().parents[1] / "mlruns")
+    os.environ.get("WQLIB_MLFLOW_ROOT", DEFAULT_WORKSPACE_ROOT / "mlruns")
 ).expanduser().resolve()
 DEFAULT_MLFLOW_URI, DEFAULT_MLFLOW_ARTIFACT_ROOT = get_default_mlflow_storage_uris(DEFAULT_MLFLOW_ROOT)
 
 # ═══ 数据与模型中间缓存默认值 ═══
 # 统一放在源码根目录，避免 handler 和示例模型缓存散落到运行目录。
 DEFAULT_DATACACHE_ROOT = Path(
-    os.environ.get("QLIB_DATACACHE_ROOT", Path(__file__).resolve().parents[1] / "datacache")
+    os.environ.get("WQLIB_DATACACHE_ROOT", DEFAULT_WORKSPACE_ROOT / "datacache")
 ).expanduser().resolve()
 DEFAULT_DATACACHE_ROOT.mkdir(parents=True, exist_ok=True)
 
 # ═══ 运行日志默认值 ═══
 # 模型训练日志与数据缓存、MLflow 实验结果分开管理。
 DEFAULT_LOG_ROOT = Path(
-    os.environ.get("QLIB_LOG_ROOT", Path(__file__).resolve().parents[1] / "logs")
+    os.environ.get("WQLIB_LOG_ROOT", DEFAULT_WORKSPACE_ROOT / "logs")
 ).expanduser().resolve()
 DEFAULT_LOG_ROOT.mkdir(parents=True, exist_ok=True)
 
