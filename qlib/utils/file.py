@@ -30,7 +30,8 @@ def get_or_create_path(path: Optional[Text] = None, return_dir: bool = False):
             if not os.path.exists(xpath):
                 os.makedirs(xpath)
     else:
-        temp_dir = os.path.expanduser("~/tmp")
+        temp_dir = os.environ.get("WQLIB_TMP_ROOT", os.path.expanduser("~/tmp"))
+        temp_dir = os.path.abspath(os.path.expanduser(temp_dir))
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
         if return_dir:
