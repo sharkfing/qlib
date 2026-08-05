@@ -50,6 +50,9 @@ class DNNModelPytorch(Model):
         learning rate
     optimizer : str
         optimizer name
+    train_log_interval : int
+        Persist training loss every N optimization steps. Validation checkpoints,
+        the first step, and the final step are always retained.
     GPU : int
         the GPU ID used for training
     """
@@ -75,8 +78,9 @@ class DNNModelPytorch(Model):
             "input_dim": 360,
             "layers": (256,),
         },
-        valid_key=DataHandlerLP.DK_L,
         # TODO: Infer Key is a more reasonable key. But it requires more detailed processing on label processing
+        valid_key=DataHandlerLP.DK_L,
+        train_log_interval=1,
     ):
         # Set logger.
         self.logger = get_module_logger("DNNModelPytorch")
@@ -88,6 +92,13 @@ class DNNModelPytorch(Model):
         self.batch_size = batch_size
         self.early_stop_rounds = early_stop_rounds
         self.eval_steps = eval_steps
+        if (
+            isinstance(train_log_interval, bool)
+            or not isinstance(train_log_interval, int)
+            or train_log_interval <= 0
+        ):
+            raise ValueError("train_log_interval must be a positive integer")
+        self.train_log_interval = train_log_interval
         self.optimizer = optimizer.lower()
         self.loss_type = loss
         if isinstance(GPU, str):
@@ -109,6 +120,7 @@ class DNNModelPytorch(Model):
             f"\nbatch_size : {batch_size}"
             f"\nearly_stop_rounds : {early_stop_rounds}"
             f"\neval_steps : {eval_steps}"
+            f"\ntrain_log_interval : {train_log_interval}"
             f"\noptimizer : {optimizer}"
             f"\nloss_type : {loss}"
             f"\nseed : {seed}"
@@ -187,6 +199,15 @@ class DNNModelPytorch(Model):
     def use_gpu(self):
         return self.device != torch.device("cpu")
 
+    def _should_log_train_loss(self, step: int) -> bool:
+        """Return whether the current step should be persisted to MLflow."""
+        return (
+            step == 1
+            or step == self.max_steps
+            or step % self.eval_steps == 0
+            or step % self.train_log_interval == 0
+        )
+
     def fit(
         self,
         dataset: DatasetH,
@@ -257,7 +278,8 @@ class DNNModelPytorch(Model):
             cur_loss.backward()
             self.train_optimizer.step()
             loss.update(cur_loss.item())
-            R.log_metrics(train_loss=loss.avg, step=step)
+            if self._should_log_train_loss(step):
+                R.log_metrics(train_loss=loss.avg, step=step)
 
             # validation
             train_loss += loss.val
