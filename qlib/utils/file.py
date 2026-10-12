@@ -13,6 +13,15 @@ from qlib.log import get_module_logger
 log = get_module_logger("utils.file")
 
 
+def _get_temp_dir() -> str:
+    from qlib.config import C
+
+    temp_dir = Path(os.environ.get("WQLIB_TMP_ROOT", Path(C["datacache_path"]) / "temp"))
+    temp_dir = temp_dir.expanduser().resolve()
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return str(temp_dir)
+
+
 def get_or_create_path(path: Optional[Text] = None, return_dir: bool = False):
     """Create or get a file or directory given the path and return_dir.
 
@@ -30,10 +39,7 @@ def get_or_create_path(path: Optional[Text] = None, return_dir: bool = False):
             if not os.path.exists(xpath):
                 os.makedirs(xpath)
     else:
-        temp_dir = os.environ.get("WQLIB_TMP_ROOT", os.path.expanduser("~/tmp"))
-        temp_dir = os.path.abspath(os.path.expanduser(temp_dir))
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
+        temp_dir = _get_temp_dir()
         if return_dir:
             _, path = tempfile.mkdtemp(dir=temp_dir)
         else:
@@ -99,7 +105,7 @@ def unpack_archive_with_buffer(buffer, format="gztar"):
     After the call is finished, the archive file and directory will be deleted.
 
     Implementation process:
-        1. create 'tempfile' in '~/tmp/' and directory
+        1. create 'tempfile' in the configured temporary data directory
         2. 'buffer' write to 'tempfile'
         3. unpack archive file('tempfile')
         4. user does something with file_path('tempfile/')
@@ -121,9 +127,7 @@ def unpack_archive_with_buffer(buffer, format="gztar"):
         ...
 
     """
-    temp_dir = os.path.expanduser("~/tmp")
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir)
+    temp_dir = _get_temp_dir()
     with tempfile.NamedTemporaryFile("wb", delete=False, dir=temp_dir) as fp:
         fp.write(buffer)
         file_path = fp.name
@@ -152,9 +156,7 @@ def unpack_archive_with_buffer(buffer, format="gztar"):
 
 @contextlib.contextmanager
 def get_tmp_file_with_buffer(buffer):
-    temp_dir = os.path.expanduser("~/tmp")
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir)
+    temp_dir = _get_temp_dir()
     with tempfile.NamedTemporaryFile("wb", delete=True, dir=temp_dir) as fp:
         fp.write(buffer)
         file_path = fp.name
