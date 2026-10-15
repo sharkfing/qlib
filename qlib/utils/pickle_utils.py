@@ -62,6 +62,7 @@ TRUSTED_MODULE_PREFIXES = (
     # 项目内 myscripts 由当前工作区所有者维护；Handler、Processor、模型和
     # 策略都需要跨进程或从共享 cache 恢复。
     "myscripts.",
+    "tools.",
 )
 
 
